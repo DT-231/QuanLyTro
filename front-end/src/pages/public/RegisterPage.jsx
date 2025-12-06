@@ -2,7 +2,8 @@ import React, { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { useNavigate, Link } from "react-router-dom"; // Import Link để chuyển trang
+import { useNavigate, Link } from "react-router-dom";
+import { authService } from "@/services/authService";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -20,8 +21,8 @@ const formSchema = z.object({
   lastName: z.string().min(1, { message: "Họ không được để trống." }),
   firstName: z.string().min(1, { message: "Tên không được để trống." }),
   email: z.string().email({ message: "Email không hợp lệ." }),
-  password: z.string().min(6, { message: "Mật khẩu phải có ít nhất 6 ký tự." }),
-  confirmPassword: z.string().min(6, { message: "Mật khẩu không khớp." }),
+  password: z.string().min(8, { message: "Mật khẩu phải có ít nhất 8 ký tự." }),
+  confirmPassword: z.string().min(8, { message: "Mật khẩu không khớp." }),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Mật khẩu không khớp.",
   path: ["confirmPassword"],
@@ -29,7 +30,8 @@ const formSchema = z.object({
 
 export default function RegisterPage() {
   const navigate = useNavigate();
-  // Khởi tạo Form
+  const [isLoading, setIsLoading] = useState(false); 
+
   const form = useForm({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -37,18 +39,38 @@ export default function RegisterPage() {
     },
   });
 
-  // Xử lý Submit
-  function onSubmit(values) {
-    console.log("Register Values:", values);
-    // --- GỌI API ĐĂNG KÝ TẠI ĐÂY ---
-    // Ví dụ: await authApi.register(values);
-    
-    alert(`Đăng ký thành công! Xin chào ${values.lastName} ${values.firstName}`);
-    
-    // Đăng ký xong chuyển về trang login
-    navigate('/login');
-  }
+  async function onSubmit(values) {
+    setIsLoading(true);
+    try {
+      // Gọi API Đăng ký
+      await authService.register(values);
+      
+      alert("Đăng ký thành công! Vui lòng đăng nhập.");
+      navigate('/login');
+    } catch (error) {
+      console.error("Chi tiết lỗi:", error);
 
+      let message = "Đăng ký thất bại. Vui lòng thử lại.";
+
+      if (error.response && error.response.data) {
+        const { detail } = error.response.data;
+
+        // Xử lý nếu detail là mảng lỗi (FastAPI standard)
+        if (Array.isArray(detail)) {
+          // Lấy ra msg của từng lỗi và nối lại
+          message = detail.map(err => 
+            `- ${err.msg.replace('value is not a valid email address', 'Email không hợp lệ')
+                        .replace('ensure this value has at least 8 characters', 'Mật khẩu phải ít nhất 8 ký tự')}`
+          ).join("\n");
+        } 
+        else if (typeof detail === "string") {
+          message = detail;
+        }
+      }
+
+      alert(message);
+    }
+  }
   return (
     <div className="flex items-center justify-center min-h-[85vh] bg-slate-50 px-4">
       <div className="w-full max-w-md bg-white p-8 rounded-xl shadow-lg border border-gray-100">
@@ -129,8 +151,12 @@ export default function RegisterPage() {
             />
 
             {/* Submit Button */}
-            <Button type="submit" className="w-full h-11 bg-black hover:bg-gray-800 text-white font-bold text-base mt-2 shadow-md transition-all">
-              Đăng ký ngay
+            <Button 
+              type="submit" 
+              disabled={isLoading} 
+              className="w-full h-11 bg-black hover:bg-gray-800 text-white font-bold text-base mt-2 shadow-md transition-all"
+            >
+              {isLoading ? "Đang xử lý..." : "Đăng ký ngay"}
             </Button>
           </form>
         </Form>

@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
+import { authService } from "@/services/authService";
 
 // Import UI components
 import { Button } from "@/components/ui/button";
@@ -26,7 +27,9 @@ const formSchema = z.object({
 export default function LoginPage() {
   const navigate = useNavigate();
   const { login } = useAuth();
+  
   const [loginError, setLoginError] = useState(""); // State báo lỗi
+  const [isLoading, setIsLoading] = useState(false); // State loading khi gọi API
 
   // Khởi tạo Form
   const form = useForm({
@@ -35,27 +38,57 @@ export default function LoginPage() {
   });
 
   // Xử lý Submit
-  function onSubmit(values) {
+  async function onSubmit(values) {
     setLoginError(""); // Reset lỗi cũ
+    setIsLoading(true); // Bật trạng thái loading
 
-    // --- LOGIC GIẢ LẬP LOGIN ---
-    // (Sau này thay bằng API call thực tế)
-    if (values.email === "admin@gmail.com" && values.password === "123456") {
-      const adminData = {
-        id: 1, name: "Admin Code", role: "admin", avatar: "https://github.com/shadcn.png"
-      };
-      login(adminData);
-      navigate("/admin/dashboard");
-    } 
-    else if (values.email === "user@gmail.com" && values.password === "123456") {
-      const userData = {
-        id: 2, name: "Khách thuê A", role: "user", avatar: "https://github.com/shadcn.png"
-      };
-      login(userData);
+    try {
+      // 1. GỌI API LOGIN
+      const response = await authService.login(values.email, values.password);
+      
+      // 2. Lấy dữ liệu từ response
+      // Cấu trúc response phụ thuộc vào FastAPI trả về. 
+      // Thường là: { access_token: "...", token_type: "bearer", user: { ... } }
+      const data = response.data; 
+
+      // 3. Lưu Token vào LocalStorage (Quan trọng để giữ đăng nhập)
+      if (data.access_token) {
+        localStorage.setItem("accessToken", data.access_token);
+      }
+
+      // 4. Cập nhật Context
+      // Nếu API trả về thông tin user (role, name...) thì truyền vào hàm login
+      // Nếu API chỉ trả về token, bạn có thể cần gọi thêm API "/me" để lấy profile
+      login(data); 
+
+      // 5. Điều hướng dựa trên Role (Nếu backend trả về role)
+      // Ví dụ: logic kiểm tra role
+      /*
+      if (data.user?.role === "ADMIN") {
+        navigate("/admin/dashboard");
+      } else {
+        navigate("/");
+      }
+      */
+      
+      // Tạm thời điều hướng về trang chủ
       navigate("/");
-    } 
-    else {
-      setLoginError("Email hoặc mật khẩu không chính xác!");
+
+    } catch (error) {
+      console.error("Login Error:", error);
+      
+      // Lấy thông báo lỗi từ Server (nếu có)
+      let message = "Email hoặc mật khẩu không chính xác!";
+      if (error.response && error.response.data) {
+        // FastAPI thường trả lỗi trong field 'detail'
+        const detail = error.response.data.detail;
+        if (typeof detail === "string") {
+            message = detail;
+        }
+      }
+      setLoginError(message);
+    } finally {
+      setIsLoading(false); // Tắt loading dù thành công hay thất bại
     }
   }
 
@@ -89,7 +122,7 @@ export default function LoginPage() {
                 <FormItem>
                   <FormLabel className="font-semibold flex">Email <span className="text-red-500 ml-1">*</span></FormLabel>
                   <FormControl>
-                    <Input placeholder="admin@gmail.com" {...field} className="h-11 bg-slate-50" />
+                    <Input placeholder="m@example.com" {...field} className="h-11 bg-slate-50" />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -119,8 +152,12 @@ export default function LoginPage() {
             </div>
 
             {/* Submit Button */}
-            <Button type="submit" className="w-full h-11 bg-black hover:bg-gray-800 text-white font-bold text-base shadow-md transition-all">
-              Đăng nhập
+            <Button 
+              type="submit" 
+              disabled={isLoading} // Disable khi đang call API
+              className="w-full h-11 bg-black hover:bg-gray-800 text-white font-bold text-base shadow-md transition-all"
+            >
+              {isLoading ? "Đang xử lý..." : "Đăng nhập"}
             </Button>
           </form>
         </Form>
