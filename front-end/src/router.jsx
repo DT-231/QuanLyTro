@@ -13,12 +13,13 @@ import RegisterPage from "./pages/public/RegisterPage";
 import ForgotPasswordPage from "./pages/public/ForgotPasswordPage";
 
 // --- Admin Pages---
-
+import DashboardAdmin from "./pages/admin/DashboardAdmin";
 import AccountManagement from "./pages/admin/AccountManagement";
 import InvoiceManagement from "./pages/admin/InvoiceManagement";
 import BuildingManagement from "./pages/admin/BuildingManagement";
 import RoomManagement from "./pages/admin/RoomManagement";
 import ContractManagement from "./pages/admin/ContractManagement";
+import IssueManagement from "./pages/admin/IssueManagement";
 
 // --- Member Pages---
 import ProfilePage from "./pages/member/ProfilePage";
@@ -29,7 +30,7 @@ const router = createBrowserRouter([
     element: <App />, 
     children: [
       // 1. PUBLIC ROUTES
-      { path: "/", element: <HomePage /> },
+      { index: true, element: <HomePage /> },
       { path: "login", element: <LoginPage /> },
       { path: "register", element: <RegisterPage /> },
       { path: "forgot-password", element: <ForgotPasswordPage /> },
@@ -53,13 +54,13 @@ const router = createBrowserRouter([
     path: "/admin",
     element: <ProtectedRoute allowedRoles={['admin']}><AdminLayout /></ProtectedRoute>,
     children: [
-      { path: "dashboard", element: <div className="p-10">Dashboard Thống kê (Đang phát triển)</div> },
+      { path: "dashboard", element: <DashboardAdmin/> },
       { path: "users", element: <AccountManagement /> },
       { path: "buildings", element:<BuildingManagement/> },
       { path: "rooms", element: <RoomManagement/> },
       { path: "invoices", element:<InvoiceManagement/> },
       { path: "contracts", element: <ContractManagement/>},
-      { path: "incidents", element: <div className="p-10">Quản lý Sự cố (Đang phát triển)</div> },
+      { path: "incidents", element: <IssueManagement/> },
     ]
   },
 

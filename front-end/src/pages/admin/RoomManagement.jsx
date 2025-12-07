@@ -1,12 +1,9 @@
 import React, { useState, useMemo } from "react";
 import { FaSearch, FaEdit, FaTrashAlt, FaPlus, FaBuilding } from "react-icons/fa";
 import { FiFilter, FiChevronLeft, FiChevronRight } from "react-icons/fi";
-
-// Giả sử bạn sẽ tạo Modal thêm phòng sau (hoặc dùng lại Modal toà nhà tuỳ ý)
-// import AddRoomModal from "@/components/modals/AddRoomModal"; 
+import AddRoomModal from "@/components/modals/AddRoomModal"; 
 
 const RoomManagement = () => {
-  // 1. Mock Data (Dựa trên hình ảnh Quản lý phòng bạn cung cấp)
   const mockRooms = [
     {
       id: 101,
@@ -127,6 +124,25 @@ const RoomManagement = () => {
     currentPage * itemsPerPage
   );
 
+
+  const handleAddNewRoom = (newRoomData) => {
+    // Map dữ liệu từ form modal sang cấu trúc của list phòng
+    const newRoom = {
+      id: Date.now(), // Tạo ID giả lập
+      number: newRoomData.roomName, // Tên phòng trong form là roomName
+      building: newRoomData.building || "Chưa cập nhật",
+      area: newRoomData.area,
+      maxPeople: newRoomData.maxPeople,
+      currentPeople: 0, // Phòng mới tạo thường chưa có người
+      status: newRoomData.status,
+      price: newRoomData.rentPrice, // Giá thuê
+      representative: "", // Chưa có người đại diện
+    };
+
+    // Thêm vào đầu danh sách và reset về trang 1
+    setRooms([newRoom, ...rooms]);
+    setCurrentPage(1);
+  };
   // 4. Helper: Format tiền tệ VND
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('vi-VN').format(amount);
@@ -219,7 +235,7 @@ const RoomManagement = () => {
       </div>
 
       {/* --- STATS CARDS --- */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
         {[
           { title: "Tổng số phòng", value: rooms.length },
           { title: "Đang thuê", value: rooms.filter((r) => r.status === "Đang thuê").length },
@@ -228,10 +244,10 @@ const RoomManagement = () => {
         ].map((stat, index) => (
           <div
             key={index}
-            className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 flex flex-col justify-between h-24"
+            className="bg-white p-4 rounded-lg shadow-sm border border-gray-100"
           >
-            <h3 className="text-sm font-medium text-gray-500">{stat.title}</h3>
-            <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
+            <h3 className="text-sm font-medium mb-1">{stat.title}</h3>
+            <p className="text-2xl font-bold text-gray-800">{stat.value}</p>
           </div>
         ))}
       </div>
@@ -277,7 +293,7 @@ const RoomManagement = () => {
                       <span
                         className={`${getStatusColor(
                           room.status
-                        )} px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide border border-transparent shadow-sm`}
+                        )} px-2 py-1 rounded-full text-[10px] font-semibold whitespace-nowrap tracking-wide shadow-sm`}
                       >
                         {room.status}
                       </span>
@@ -320,8 +336,7 @@ const RoomManagement = () => {
               onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               disabled={currentPage === 1}
               className="px-3 py-1.5 rounded-md text-sm font-medium transition-colors 
-                 text-gray-600 hover:bg-gray-100 
-                 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                text-gray-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
             >
               <FiChevronLeft /> Prev
             </button>
@@ -332,7 +347,7 @@ const RoomManagement = () => {
                 onClick={() => setCurrentPage(idx + 1)}
                 className={`px-3 py-1 rounded text-sm transition-all ${
                   currentPage === idx + 1
-                    ? "bg-gray-900 text-white font-medium shadow-sm"
+                    ? "bg-gray-100 text-black font-medium"
                     : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"
                 }`}
               >
@@ -351,9 +366,11 @@ const RoomManagement = () => {
           </div>
         </div>
       </div>
-      
-      {/* Placeholder cho Modal thêm phòng */}
-      {/* <AddRoomModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} /> */}
+      <AddRoomModal 
+        isOpen={isAddModalOpen} 
+        onClose={() => setIsAddModalOpen(false)} 
+        onAddSuccess={handleAddNewRoom} 
+      />
     </div>
   );
 };

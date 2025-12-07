@@ -166,7 +166,7 @@ const AccountManagement = () => {
             {/* Lọc Trạng Thái */}
             <div className="relative">
               <select
-                className="appearance-none border px-2 py-1.5 pr-8 rounded-md bg-white hover:bg-gray-50 text-xs focus:outline-none cursor-pointer"
+                className="w-full appearance-none border border-gray-200 px-3 py-1 pr-8 rounded-md bg-white hover:bg-gray-50 text-sm focus:outline-none cursor-pointer text-gray-700"
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
               >
@@ -175,13 +175,13 @@ const AccountManagement = () => {
                 <option value="Chưa thuê">Chưa thuê</option>
                 <option value="Chưa có giấy tờ">Chưa có giấy tờ</option>
               </select>
-              <FiFilter className="absolute right-2 top-2 text-gray-400 w-3 h-3 pointer-events-none" />
+              <FiFilter className="absolute right-3 top-2.5 text-gray-400 w-3 h-3 pointer-events-none" />
             </div>
 
             {/* Lọc Giới Tính */}
             <div className="relative">
               <select
-                className="appearance-none border px-3 py-1.5 pr-8 rounded-md bg-white hover:bg-gray-50 text-xs focus:outline-none cursor-pointer"
+                className="w-full appearance-none border border-gray-200 px-3 py-1 pr-8 rounded-md bg-white hover:bg-gray-50 text-sm focus:outline-none cursor-pointer text-gray-700"
                 value={filterGender}
                 onChange={(e) => setFilterGender(e.target.value)}
               >
@@ -189,7 +189,7 @@ const AccountManagement = () => {
                 <option value="Nam">Nam</option>
                 <option value="Nữ">Nữ</option>
               </select>
-              <FiFilter className="absolute right-2 top-2 text-gray-400 w-3 h-3 pointer-events-none" />
+              <FiFilter className="absolute right-3 top-2.5 text-gray-400 w-3 h-3 pointer-events-none" />
             </div>
           </div>
         </div>
