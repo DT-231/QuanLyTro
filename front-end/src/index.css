@@ -1,8 +1,20 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-@theme{
+@theme {
   /* custome tailwind */
+}
+
+/* Ẩn mũi tên trong Chrome, Safari, Edge, Opera */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Ẩn mũi tên trong Firefox */
+input[type="number"] {
+  -moz-appearance: textfield;
 }
 
 @custom-variant dark (&:is(.dark *));
@@ -118,6 +130,7 @@
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     @apply bg-background text-foreground;
   }

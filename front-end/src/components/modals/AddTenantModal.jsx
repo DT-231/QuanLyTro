@@ -65,12 +65,12 @@ export default function AddTenantModal({ isOpen, onClose, onAddSuccess }) {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[700px] p-0 overflow-hidden bg-white text-black">
+      <DialogContent className="sm:max-w-[550px] p-0 overflow-hidden bg-white text-black">
         
         {/* HEADER */}
         <div className="p-6 pb-2">
             <DialogHeader>
-            <DialogTitle className="text-xl font-bold">Thêm khách thuê</DialogTitle>
+            <DialogTitle className="text-2xl font-bold">Thêm khách thuê</DialogTitle>
             <DialogDescription>Nhập thông tin khách thuê mới</DialogDescription>
             </DialogHeader>
         </div>
@@ -204,7 +204,7 @@ export default function AddTenantModal({ isOpen, onClose, onAddSuccess }) {
                 {activeTab === "images" && (
                     <div className="space-y-4">
                         <div className="flex justify-between items-center">
-                            <p className="text-xs text-gray-500">Giúp tối đa 2 ảnh (Mặt trước, mặt sau)</p>
+                            <p className="text-xs text-gray-500">Tối đa 2 ảnh (Mặt trước, mặt sau)</p>
                             <Button type="button" variant="outline" size="sm" className="gap-2 h-8">
                                 <Upload size={14} /> Tải ảnh
                             </Button>

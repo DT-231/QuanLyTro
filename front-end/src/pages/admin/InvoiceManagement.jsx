@@ -6,8 +6,10 @@ import {
   FaPlus,
   FaEllipsisH,
 } from "react-icons/fa";
-import { FiFilter } from "react-icons/fi";
+import { FiFilter, FiChevronLeft, FiChevronRight } from "react-icons/fi";
 import InvoiceDetailModal from "@/components/modals/InvoiceDetailModal";
+import AddInvoiceModal from "@/components/modals/AddInvoiceModal";
+
 const InvoiceManagement = () => {
   // 1. Mock Data (Giả lập dữ liệu hóa đơn)
   const mockInvoices = [
@@ -61,6 +63,16 @@ const InvoiceManagement = () => {
       deadline: "23/12/2025",
       status: "Đã thanh toán",
     },
+    {
+      id: 550,
+      room: "405",
+      tenant: "Nguyễn Việt Dũng",
+      date: "23/07/2025",
+      electricity: 167,
+      water: 16,
+      deadline: "23/12/2025",
+      status: "Đã thanh toán",
+    },
   ];
 
   // 2. States
@@ -68,33 +80,56 @@ const InvoiceManagement = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterRoom, setFilterRoom] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
-  const [selectedInvoice, setSelectedInvoice] = useState(null); // Lưu hóa đơn đang chọn
+  const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  // --- THÊM STATE CHO PHÂN TRANG ---
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 5;
 
   // 3. Hàm mở Modal
   const handleViewDetail = (invoice) => {
     setSelectedInvoice(invoice);
     setIsDetailModalOpen(true);
   };
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
   // 3. Logic Lọc dữ liệu
   const filteredInvoices = useMemo(() => {
     return invoices.filter((invoice) => {
-      // a. Tìm kiếm theo tên khách
       const matchesSearch = invoice.tenant
         .toLowerCase()
         .includes(searchTerm.toLowerCase());
-      // b. Lọc theo Phòng
       const matchesRoom = filterRoom ? invoice.room === filterRoom : true;
-      // c. Lọc theo Trạng thái
       const matchesStatus = filterStatus
         ? invoice.status === filterStatus
         : true;
-
       return matchesSearch && matchesRoom && matchesStatus;
     });
   }, [invoices, searchTerm, filterRoom, filterStatus]);
 
+  const totalPages = Math.ceil(filteredInvoices.length / itemsPerPage);
+  const currentInvoices = filteredInvoices.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  const handleAddInvoice = (data) => {
+    console.log("Dữ liệu hóa đơn mới:", data);
+
+    // Tạo object mới phù hợp với cấu trúc bảng hiện tại
+    const newInvoice = {
+      id: Math.floor(Math.random() * 1000) + 100,
+      room: data.room,
+      tenant: data.customerName,
+      date: data.invoiceDate.split("-").reverse().join("/"), // Chuyển yyyy-mm-dd -> dd/mm/yyyy
+      electricity: data.elecUsed,
+      water: data.waterUsed,
+      deadline: data.dueDate ? data.dueDate.split("-").reverse().join("/") : "",
+      status: data.status,
+    };
+
+    setInvoices([newInvoice, ...invoices]);
+  };
   // 4. Helper function màu sắc trạng thái
   const getStatusColor = (status) => {
     switch (status) {
@@ -114,7 +149,10 @@ const InvoiceManagement = () => {
       {/* HEADER */}
       <div className="flex justify-between items-center mb-4">
         <h1 className="text-3xl font-bold text-gray-800">Quản lý hóa đơn</h1>
-        <button className="flex items-center gap-2 bg-gray-900 hover:bg-gray-800 text-white px-3 py-2 rounded-lg text-sm transition-all">
+        <button
+          onClick={() => setIsAddModalOpen(true)}
+          className="flex items-center gap-2 bg-gray-900 hover:bg-gray-800 text-white px-3 py-2 rounded-lg text-sm transition-all"
+        >
           <FaPlus size={10} /> Thêm hóa đơn
         </button>
       </div>
@@ -146,20 +184,20 @@ const InvoiceManagement = () => {
             {/* Lọc Phòng */}
             <div className="relative">
               <select
-                className="appearance-none border px-3 py-1.5 pr-8 rounded-md bg-white hover:bg-gray-50 text-xs focus:outline-none cursor-pointer"
+                className="w-full appearance-none border border-gray-200 px-3 py-1 pr-8 rounded-md bg-white hover:bg-gray-50 text-sm focus:outline-none cursor-pointer text-gray-700"
                 value={filterRoom}
                 onChange={(e) => setFilterRoom(e.target.value)}
               >
                 <option value="">Tất cả phòng</option>
                 {/* Thêm các phòng khác nếu cần */}
               </select>
-              <FiFilter className="absolute right-2 top-2 text-gray-400 w-3 h-3 pointer-events-none" />
+              <FiFilter className="absolute right-3 top-2.5 text-gray-400 w-3 h-3 pointer-events-none" />
             </div>
 
             {/* Lọc Trạng Thái */}
             <div className="relative">
               <select
-                className="appearance-none border px-3 py-1.5 pr-8 rounded-md bg-white hover:bg-gray-50 text-xs focus:outline-none cursor-pointer"
+                className="w-full appearance-none border border-gray-200 px-3 py-1 pr-8 rounded-md bg-white hover:bg-gray-50 text-sm focus:outline-none cursor-pointer text-gray-700"
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
               >
@@ -168,7 +206,7 @@ const InvoiceManagement = () => {
                 <option value="Chưa thanh toán">Chưa thanh toán</option>
                 <option value="Đang xử lý">Đang xử lý</option>
               </select>
-              <FiFilter className="absolute right-2 top-2 text-gray-400 w-3 h-3 pointer-events-none" />
+              <FiFilter className="absolute right-3 top-2.5 text-gray-400 w-3 h-3 pointer-events-none" />
             </div>
           </div>
         </div>
@@ -179,11 +217,11 @@ const InvoiceManagement = () => {
         {[
           {
             title: "Tổng Hóa đơn",
-            value: invoices.length, 
+            value: invoices.length,
           },
           {
             title: "Đã thanh toán",
-            value: invoices.filter((i) => i.status === "Đã thanh toán").length, 
+            value: invoices.filter((i) => i.status === "Đã thanh toán").length,
           },
           {
             title: "Chưa thanh toán",
@@ -197,7 +235,8 @@ const InvoiceManagement = () => {
         ].map((stat, index) => (
           <div
             key={index}
-            className="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
+            className="bg-white p-4 rounded-lg shadow-sm border border-gray-100"
+          >
             <h3 className=" text-sm font-medium mb-1">{stat.title} </h3>
             <p className="text-2xl font-bold text-gray-800">{stat.value}</p>
           </div>
@@ -226,8 +265,8 @@ const InvoiceManagement = () => {
               </tr>
             </thead>
             <tbody className="text-sm text-gray-700 divide-y divide-gray-100">
-              {filteredInvoices.length > 0 ? (
-                filteredInvoices.map((item) => (
+              {currentInvoices.length > 0 ? (
+                currentInvoices.map((item) => (
                   <tr
                     key={item.id}
                     className="hover:bg-gray-50 transition-colors"
@@ -253,12 +292,12 @@ const InvoiceManagement = () => {
                       </span>
                     </td>
                     <td className="p-3 text-center">
-                        <div
-                          onClick={() => handleViewDetail(item)}
-                          className="flex justify-center items-center text-gray-400 cursor-pointer hover:text-black"
-                        >
-                          <FaEllipsisH />
-                        </div>
+                      <div
+                        onClick={() => handleViewDetail(item)}
+                        className="flex justify-center items-center text-gray-400 cursor-pointer hover:text-black"
+                      >
+                        <FaEllipsisH />
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -277,7 +316,55 @@ const InvoiceManagement = () => {
           onClose={() => setIsDetailModalOpen(false)}
           invoice={selectedInvoice}
         />
-        {/* Pagination */}
+
+        <AddInvoiceModal
+          isOpen={isAddModalOpen}
+          onClose={() => setIsAddModalOpen(false)}
+          onAddSuccess={handleAddInvoice}
+        />
+        {/* --- FOOTER & PAGINATION (Đã sửa lỗi) --- */}
+        <div className="p-4 bg-white flex flex-col sm:flex-row justify-between items-center gap-4">
+          <span className="text-xs text-gray-500 font-medium">
+            Hiển thị {currentInvoices.length} trên tổng số{" "}
+            {filteredInvoices.length} hóa đơn
+          </span>
+
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-1.5 rounded-md text-sm font-medium transition-colors 
+                 text-gray-600 hover:bg-gray-100 
+                 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+            >
+              <FiChevronLeft /> Prev
+            </button>
+
+            {/* Tạo danh sách số trang */}
+            {[...Array(totalPages)].map((_, idx) => (
+              <button
+                key={idx}
+                onClick={() => setCurrentPage(idx + 1)}
+                className={`px-3 py-1 rounded text-sm transition-all ${
+                  currentPage === idx + 1
+                    ? "bg-gray-100 text-black font-medium"
+                    : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"
+                }`}
+              >
+                {idx + 1}
+              </button>
+            ))}
+
+            <button
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages || totalPages === 0}
+              className="px-3 py-1.5 rounded-md text-sm font-medium transition-colors text-gray-600 hover:bg-gray-100 
+                 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+            >
+              Next <FiChevronRight />
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

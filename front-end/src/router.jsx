@@ -13,9 +13,13 @@ import RegisterPage from "./pages/public/RegisterPage";
 import ForgotPasswordPage from "./pages/public/ForgotPasswordPage";
 
 // --- Admin Pages---
-
+import DashboardAdmin from "./pages/admin/DashboardAdmin";
 import AccountManagement from "./pages/admin/AccountManagement";
 import InvoiceManagement from "./pages/admin/InvoiceManagement";
+import BuildingManagement from "./pages/admin/BuildingManagement";
+import RoomManagement from "./pages/admin/RoomManagement";
+import ContractManagement from "./pages/admin/ContractManagement";
+import IssueManagement from "./pages/admin/IssueManagement";
 
 // --- Member Pages---
 import ProfilePage from "./pages/member/ProfilePage";
@@ -26,22 +30,17 @@ const router = createBrowserRouter([
     element: <App />, 
     children: [
       // 1. PUBLIC ROUTES
-      { path: "/", element: <HomePage /> },
+      { index: true, element: <HomePage /> },
       { path: "login", element: <LoginPage /> },
       { path: "register", element: <RegisterPage /> },
       { path: "forgot-password", element: <ForgotPasswordPage /> },
-      
-      // Trang chưa làm -> Dùng div tạm
       { path: "search-rooms", element: <div className="p-10 text-center">Trang Tìm kiếm phòng (Đang phát triển)</div> },
-
       // 2. MEMBER ROUTES 
       {
         path: "member",
         element: <ProtectedRoute allowedRoles={['user']}><MemberLayout /></ProtectedRoute>,
         children: [
           { path: "profile", element: <ProfilePage /> },
-          
-          // Các trang chưa làm -> Dùng div tạm
           { path: "my-contracts", element: <div className="p-10">Hợp đồng của tôi (Đang phát triển)</div> },
           { path: "my-invoices", element: <div className="p-10">Hóa đơn của tôi (Đang phát triển)</div> },
           { path: "incidents", element: <div className="p-10">Báo cáo sự cố (Đang phát triển)</div> },
@@ -55,13 +54,13 @@ const router = createBrowserRouter([
     path: "/admin",
     element: <ProtectedRoute allowedRoles={['admin']}><AdminLayout /></ProtectedRoute>,
     children: [
-      { path: "dashboard", element: <div className="p-10">Dashboard Thống kê (Đang phát triển)</div> },
+      { path: "dashboard", element: <DashboardAdmin/> },
       { path: "users", element: <AccountManagement /> },
-      { path: "buildings", element: <div className="p-10">Quản lý Tòa nhà (Đang phát triển)</div> },
-      { path: "rooms", element: <div className="p-10">Quản lý Phòng (Đang phát triển)</div> },
+      { path: "buildings", element:<BuildingManagement/> },
+      { path: "rooms", element: <RoomManagement/> },
       { path: "invoices", element:<InvoiceManagement/> },
-      { path: "contracts", element: <div className="p-10">Quản lý Hợp đồng (Đang phát triển)</div> },
-      { path: "incidents", element: <div className="p-10">Quản lý Sự cố (Đang phát triển)</div> },
+      { path: "contracts", element: <ContractManagement/>},
+      { path: "incidents", element: <IssueManagement/> },
     ]
   },
 
