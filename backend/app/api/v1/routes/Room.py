@@ -633,3 +633,4 @@ def search_rooms(
         return response.bad_request(message=str(e))
     except Exception as e:
         return response.internal_error(message=f"Lỗi hệ thống: {str(e)}")
+

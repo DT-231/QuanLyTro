@@ -252,3 +252,4 @@ def delete_building(
             return response.conflict(message=str(e))
     except Exception as e:
         return response.internal_error(message=f"Lỗi hệ thống: {str(e)}")
+

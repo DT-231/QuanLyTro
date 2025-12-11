@@ -170,3 +170,30 @@ async def create_tenant(
         return {"code": 400, "message": msg}
 
     return {"code": 201, "message": msg, "data": {}}
+
+
+@router.get("/me")
+async def get_current_user_info(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Lấy thông tin người dùng hiện tại (từ access token).
+    
+    Trả về:
+    - Thông tin cá nhân (first_name, last_name, email, phone, cccd, ...)
+    - Role (role_name)
+    - Trạng thái (status)
+    - Thời gian tạo/cập nhật
+    
+    **Yêu cầu**: Bearer token hợp lệ
+    """
+    try:
+        # Convert User ORM sang UserOut schema
+        user_out = UserOut.model_validate(current_user)
+        return response.success(
+            message="Lấy thông tin người dùng thành công",
+            data=user_out,
+        )
+    except Exception as e:
+        return response.internal_error(message=f"Lỗi hệ thống: {str(e)}")
