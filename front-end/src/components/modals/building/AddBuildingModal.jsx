@@ -161,7 +161,7 @@ export default function AddBuildingModal({ isOpen, onClose, onAddSuccess }) {
                       <FormItem>
                         <FormLabel>Số nhà</FormLabel>
                         <FormControl>
-                          <Input placeholder="123" {...field} />
+                          <Input placeholder="" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -174,7 +174,7 @@ export default function AddBuildingModal({ isOpen, onClose, onAddSuccess }) {
                       <FormItem>
                         <FormLabel>Tên đường</FormLabel>
                         <FormControl>
-                          <Input placeholder="Trần phú,..." {...field} />
+                          <Input placeholder="" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -191,7 +191,7 @@ export default function AddBuildingModal({ isOpen, onClose, onAddSuccess }) {
                       <FormItem>
                         <FormLabel>Phường / Xã</FormLabel>
                         <FormControl>
-                          <Input placeholder="Hải Châu 1" {...field} />
+                          <Input placeholder="Hải Châu" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>

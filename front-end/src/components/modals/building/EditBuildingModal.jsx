@@ -6,35 +6,22 @@ import { Plus } from "lucide-react";
 import { FaSave } from "react-icons/fa";
 
 // Import Service
+import { addressService } from "@/services/addressService"; 
 import AddUtilityModal from "../utility/AddUtilityModal";
 
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
+  Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea"; 
+import { Textarea } from "@/components/ui/textarea";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 
-// Schema validation
 const buildingSchema = z.object({
   name: z.string().min(1, "Tên toà nhà là bắt buộc"),
   houseNumber: z.string().optional(),
@@ -70,46 +57,32 @@ export default function EditBuildingModal({ isOpen, onClose, onUpdateSuccess, bu
   // --- LOGIC ĐỔ DỮ LIỆU ---
   useEffect(() => {
     if (buildingData && isOpen) {
-      // 1. Tách địa chỉ để điền vào form
+      console.log("Data nhận được:", buildingData); // Check xem có address_id không
+
       const fullAddr = buildingData.address_line || "";
       let hNum = "", str = "", wrd = "", cty = "";
+      let parts = fullAddr.split(",").map(s => s.trim()).filter(Boolean);
 
-      const parts = fullAddr.split(",").map(s => s.trim()).filter(s => s);
+      if (parts.length > 0 && parts[parts.length - 1].toLowerCase() === "vietnam") parts.pop();
+      if (parts.length > 0) cty = parts.pop();
+      if (parts.length > 0) wrd = parts.pop();
 
-      // Loại bỏ "Vietnam" ở cuối nếu có
-      if (parts.length > 0 && parts[parts.length - 1].toLowerCase().includes("vietnam")) {
-        parts.pop();
-      }
-
-      if (parts.length >= 3) {
-        cty = parts.pop(); // TP
-        wrd = parts.pop(); // Phường
-        
-        // Tách Số nhà và Đường
-        const streetPart = parts.join(", ");
-        const firstSpace = streetPart.indexOf(" ");
-        if (firstSpace > 0) {
-           const possibleNum = streetPart.substring(0, firstSpace);
-           if (/\d/.test(possibleNum) && possibleNum.length < 10) {
-              hNum = possibleNum;
-              str = streetPart.substring(firstSpace + 1);
-           } else {
+      const streetPart = parts.join(", "); 
+      const firstSpaceIndex = streetPart.indexOf(" ");
+      
+      if (firstSpaceIndex > 0) {
+          const firstWord = streetPart.substring(0, firstSpaceIndex);
+          if (/\d/.test(firstWord)) {
+              hNum = firstWord;
+              str = streetPart.substring(firstSpaceIndex + 1);
+          } else {
               str = streetPart;
-           }
-        } else {
-           str = streetPart;
-        }
-      } else if (parts.length === 2) {
-        cty = parts.pop();
-        str = parts.join(", ");
-      } else if (parts.length === 1) {
-        str = parts[0];
+          }
+      } else {
+          str = streetPart;
       }
 
-      if (!str) str = fullAddr; 
-      if (!cty) cty = "Đà Nẵng"; 
-
-      // 2. Xử lý tiện ích
+      // Tiện ích
       const desc = buildingData.description || "";
       let cleanDescription = desc;
       const match = desc.match(/\[Tiện ích: (.*?)\]/);
@@ -124,7 +97,6 @@ export default function EditBuildingModal({ isOpen, onClose, onUpdateSuccess, bu
       }
       setUtilities(newUtilsState);
 
-      // 3. Reset form
       let currentStatus = buildingData.status || "ACTIVE";
       if (!["ACTIVE", "INACTIVE", "SUSPENDED"].includes(currentStatus)) currentStatus = "ACTIVE"; 
 
@@ -149,53 +121,60 @@ export default function EditBuildingModal({ isOpen, onClose, onUpdateSuccess, bu
     setUtilities([...utilities, { id: newId, label: name, checked: true }]);
   };
 
-  // --- HÀM SUBMIT QUAN TRỌNG ---
+  // --- HÀM SUBMIT (FIXED) ---
   const onSubmit = async (values) => {
     setIsSaving(true);
     try {
-        // 1. Chuẩn bị tiện ích
+        // 1. Chuẩn bị dữ liệu
         const selectedUtils = utilities.filter(u => u.checked).map(u => u.label).join(", ");
         let finalDescription = values.description || "";
         if (selectedUtils) finalDescription += ` \n[Tiện ích: ${selectedUtils}]`;
 
-        // 2. Chuẩn bị địa chỉ (Address Line = Số nhà + Đường)
         const streetLine = [values.houseNumber, values.street].filter(Boolean).join(" ");
-        
-        // --- GỌI API CẬP NHẬT ĐỊA CHỈ ---
-        // Backend yêu cầu address_id để update
+        const fullAddressDisplay = [streetLine, values.ward, values.city, "Vietnam"].filter(Boolean).join(", ");
+
+        // 2. Nếu có address_id thì gọi update riêng (Trường hợp hy hữu data đầy đủ)
         if (buildingData.address_id) {
             try {
                 await addressService.update(buildingData.address_id, {
-                    address_line: streetLine, // Backend sẽ dùng cái này
+                    address_line: streetLine,
                     ward: values.ward,
                     city: values.city,
-                    country: "Vietnam"
-                    // Backend tự ghép full_address nên không cần gửi
+                    country: "Vietnam",
+                    full_address: fullAddressDisplay
                 });
-                console.log("Đã cập nhật địa chỉ");
-            } catch (addrError) {
-                console.error("Lỗi cập nhật địa chỉ:", addrError);
-                // Có thể alert lỗi ở đây nếu muốn chặt chẽ
-            }
+            } catch (e) { console.error("Lỗi update address service", e)}
         }
-
-        // --- GỌI API CẬP NHẬT TÒA NHÀ ---
-        // Chuỗi full address để hiển thị ngay trên UI mà không cần reload
-        const fullAddressDisplay = [streetLine, values.ward, values.city, "Vietnam"].filter(Boolean).join(", ");
-
         const buildingPayload = {
           building_code: buildingData.building_code,
           building_name: values.name,
-          address_id: buildingData.address_id, // Giữ ID để liên kết
           description: finalDescription.trim(),
           status: values.status,
-          
-          // Gửi kèm object address (nếu backend building hỗ trợ nhận, nếu không nó sẽ bị ignore)
-          address_line: fullAddressDisplay 
+          address: {
+             address_line: streetLine,
+             ward: values.ward,
+             city: values.city,
+             country: "Vietnam",
+             full_address: fullAddressDisplay
+          },
+
+        
+          address_line: fullAddressDisplay, 
+          ward: values.ward,               
+          city: values.city,
+          street: streetLine
         };
 
+    
         if (onUpdateSuccess && buildingData) {
-            await onUpdateSuccess(buildingData.id, buildingPayload);
+          
+            const manualDataForUI = {
+                ...buildingData,
+                ...buildingPayload,
+                address_line: fullAddressDisplay 
+            };
+            
+            await onUpdateSuccess(buildingData.id, manualDataForUI);
         }
         
         onClose();
@@ -222,90 +201,45 @@ export default function EditBuildingModal({ isOpen, onClose, onUpdateSuccess, bu
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
                 <FormField control={form.control} name="name" render={({ field }) => (
-                    <FormItem className="space-y-1">
-                      <FormLabel className="text-xs font-semibold text-gray-700">Tên toà nhà</FormLabel>
-                      <FormControl><Input className="h-9 focus-visible:ring-1 focus-visible:ring-black" {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                    <FormItem className="space-y-1"><FormLabel className="text-xs font-semibold text-gray-700">Tên toà nhà</FormLabel><FormControl><Input className="h-9" {...field} /></FormControl><FormMessage /></FormItem>
+                  )}/>
                 
                 <div className="grid grid-cols-3 gap-3">
                   <FormField control={form.control} name="houseNumber" render={({ field }) => (
-                      <FormItem className="col-span-1 space-y-1">
-                        <FormLabel className="text-xs font-semibold text-gray-700">Số nhà</FormLabel>
-                        <FormControl><Input className="h-9 focus-visible:ring-1 focus-visible:ring-black" {...field} /></FormControl>
-                      </FormItem>
-                    )}
-                  />
+                      <FormItem className="col-span-1 space-y-1"><FormLabel className="text-xs font-semibold text-gray-700">Số nhà</FormLabel><FormControl><Input className="h-9" {...field} /></FormControl></FormItem>
+                    )}/>
                   <FormField control={form.control} name="street" render={({ field }) => (
-                      <FormItem className="col-span-2 space-y-1">
-                        <FormLabel className="text-xs font-semibold text-gray-700">Tên đường</FormLabel>
-                        <FormControl><Input className="h-9 focus-visible:ring-1 focus-visible:ring-black" {...field} /></FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                      <FormItem className="col-span-2 space-y-1"><FormLabel className="text-xs font-semibold text-gray-700">Tên đường</FormLabel><FormControl><Input className="h-9" {...field} /></FormControl><FormMessage /></FormItem>
+                    )}/>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <FormField control={form.control} name="ward" render={({ field }) => (
-                      <FormItem className="space-y-1">
-                        <FormLabel className="text-xs font-semibold text-gray-700">Phường / Xã</FormLabel>
-                        <FormControl><Input className="h-9 focus-visible:ring-1 focus-visible:ring-black" {...field} /></FormControl>
-                      </FormItem>
-                    )}
-                  />
+                      <FormItem className="space-y-1"><FormLabel className="text-xs font-semibold text-gray-700">Phường / Xã</FormLabel><FormControl><Input className="h-9" {...field} /></FormControl></FormItem>
+                    )}/>
                   <FormField control={form.control} name="city" render={({ field }) => (
-                      <FormItem className="space-y-1">
-                        <FormLabel className="text-xs font-semibold text-gray-700">Thành phố</FormLabel>
-                        <FormControl><Input className="h-9 focus-visible:ring-1 focus-visible:ring-black" {...field} /></FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                      <FormItem className="space-y-1"><FormLabel className="text-xs font-semibold text-gray-700">Thành phố</FormLabel><FormControl><Input className="h-9" {...field} /></FormControl><FormMessage /></FormItem>
+                    )}/>
                 </div>
 
                 <FormField control={form.control} name="status" render={({ field }) => (
-                    <FormItem className="space-y-1">
-                      <FormLabel className="text-xs font-semibold text-gray-700">Trạng thái</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
-                        <FormControl><SelectTrigger className="h-9 focus:ring-1 focus:ring-black"><SelectValue /></SelectTrigger></FormControl>
-                        <SelectContent>
-                          <SelectItem value="ACTIVE">Hoạt động</SelectItem>
-                          <SelectItem value="SUSPENDED">Tạm dừng</SelectItem>
-                          <SelectItem value="INACTIVE">Ngừng hoạt động</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                    <FormItem className="space-y-1"><FormLabel className="text-xs font-semibold text-gray-700">Trạng thái</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}><FormControl><SelectTrigger className="h-9"><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="ACTIVE">Hoạt động</SelectItem><SelectItem value="SUSPENDED">Tạm dừng</SelectItem><SelectItem value="INACTIVE">Ngừng hoạt động</SelectItem></SelectContent></Select><FormMessage /></FormItem>
+                  )}/>
 
                 <FormField control={form.control} name="description" render={({ field }) => (
-                    <FormItem className="space-y-1">
-                      <FormLabel className="text-xs font-semibold text-gray-700">Mô tả (Ngoài tiện ích)</FormLabel>
-                      <FormControl><Textarea {...field} className="min-h-[60px] text-sm resize-none focus-visible:ring-1 focus-visible:ring-black" /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                    <FormItem className="space-y-1"><FormLabel className="text-xs font-semibold text-gray-700">Mô tả (Ngoài tiện ích)</FormLabel><FormControl><Textarea {...field} className="min-h-[60px] text-sm" /></FormControl><FormMessage /></FormItem>
+                  )}/>
 
                 <div className="pt-1">
-                  <FormLabel className="text-xs font-bold text-black mb-2 block">Tiện ích (Đã có)</FormLabel>
+                  <FormLabel className="text-xs font-bold text-black mb-2 block">Tiện ích</FormLabel>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     {utilities.map((util) => (
-                      <div key={util.id} className="flex items-center space-x-2">
-                        <input type="checkbox" id={`edit-${util.id}`} checked={util.checked} onChange={() => toggleUtility(util.id)} className="h-4 w-4 accent-black cursor-pointer" />
-                        <label htmlFor={`edit-${util.id}`} className="text-xs font-medium cursor-pointer text-gray-700">{util.label}</label>
-                      </div>
+                      <div key={util.id} className="flex items-center space-x-2"><input type="checkbox" checked={util.checked} onChange={() => toggleUtility(util.id)} className="h-4 w-4 accent-black" /><label className="text-xs font-medium text-gray-700">{util.label}</label></div>
                     ))}
-                    <button type="button" onClick={() => setIsUtilityModalOpen(true)} className="flex items-center space-x-1.5 text-black hover:text-gray-700 col-span-1">
-                      <div className="h-3.5 w-3.5 border border-black rounded flex items-center justify-center"><Plus size={10} /></div>
-                      <span className="text-xs font-bold leading-none">Thêm tiện ích</span>
-                    </button>
+                    <button type="button" onClick={() => setIsUtilityModalOpen(true)} className="flex items-center space-x-1.5 text-black col-span-1"><div className="h-3.5 w-3.5 border border-black rounded flex items-center justify-center"><Plus size={10} /></div><span className="text-xs font-bold">Thêm tiện ích</span></button>
                   </div>
                 </div>
+
               </form>
             </Form>
           </div>
