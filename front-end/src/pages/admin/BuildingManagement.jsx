@@ -17,7 +17,7 @@ import EditBuildingModal from "@/components/modals/building/EditBuildingModal";
 import BuildingDetailModal from "@/components/modals/building/BuildingDetailModal";
 import { buildingService } from "@/services/buildingService";
 
-// --- COMPONENT: SHADCN STYLE ALERT DIALOG (Mô phỏng cho chức năng Xóa) ---
+// --- COMPONENT: DELETE MODAL ---
 const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, itemName }) => {
   if (!isOpen) return null;
 
@@ -33,16 +33,10 @@ const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, itemName }) => {
           </p>
         </div>
         <div className="flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2 gap-2 sm:gap-0">
-          <button
-            onClick={onClose}
-            className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-gray-100 hover:text-accent-foreground h-10 px-4 py-2"
-          >
+          <button onClick={onClose} className="inline-flex items-center justify-center rounded-md text-sm font-medium border border-input bg-background hover:bg-gray-100 h-10 px-4 py-2">
             Hủy bỏ
           </button>
-          <button
-            onClick={onConfirm}
-            className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-red-600 text-white hover:bg-red-700 h-10 px-4 py-2"
-          >
+          <button onClick={onConfirm} className="inline-flex items-center justify-center rounded-md text-sm font-medium bg-red-600 text-white hover:bg-red-700 h-10 px-4 py-2">
             Đồng ý xóa
           </button>
         </div>
@@ -59,60 +53,25 @@ const BuildingManagement = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
 
-  // --- MODAL STATES ---
+  // Modal States
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-
-  // States cho Edit
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [selectedBuilding, setSelectedBuilding] = useState(null);
-
-  // States cho Detail (Xem chi tiết)
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+
+  // Selected Items
+  const [selectedBuilding, setSelectedBuilding] = useState(null);
   const [detailBuildingData, setDetailBuildingData] = useState(null);
+  const [buildingToDelete, setBuildingToDelete] = useState(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
 
-  // States cho Xóa (Mới thêm)
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [buildingToDelete, setBuildingToDelete] = useState(null);
-
-  // Pagination states
+  // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
 
-  // --- HELPER: CHUYỂN ĐỔI TRẠNG THÁI ---
-  const getStatusLabel = (status) => {
-    switch (status) {
-      case "ACTIVE": return "Hoạt động";
-      case "INACTIVE": return "Ngừng hoạt động";
-      case "SUSPENDED": return "Tạm dừng";
-      default: return status;
-    }
-  };
+  // --- API HANDLERS ---
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case "ACTIVE": return "text-green-600 bg-green-100";
-      case "SUSPENDED": return "text-yellow-600 bg-yellow-100";
-      case "INACTIVE": return "text-gray-600 bg-gray-300";
-      default: return "text-gray-600 bg-gray-300";
-    }
-  };
-
-  const extractUtilities = (description) => {
-    if (!description) return "---";
-    const match = description.match(/\[Tiện ích: (.*?)\]/);
-    
-    if (match && match[1]) {
-      const utilsList = match[1].split(",");
-      if (utilsList.length > 2) {
-        return utilsList.slice(0, 2).join(", ").trim() + "..."; 
-      }
-      return match[1];
-    }
-    return "---";
-  };
-
-  // --- FETCH DATA ---
+  // 1. Fetch List
   const fetchBuildings = async () => {
     try {
       setLoading(true);
@@ -135,65 +94,51 @@ const BuildingManagement = () => {
     fetchBuildings();
   }, []);
 
-  // --- LOGIC LỌC ---
-  const filteredBuildings = useMemo(() => {
-    if (!Array.isArray(buildings)) return [];
-    return buildings.filter((building) => {
-      const name = building.building_name || "";
-      const address = building.address_line || "";
-      const status = building.status || "";
-
-      const matchesSearch =
-        name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        address.toLowerCase().includes(searchTerm.toLowerCase());
-
-      let matchesStatus = true;
-      if (filterStatus) {
-        if (filterStatus === "Hoạt động") matchesStatus = status === "ACTIVE";
-        else matchesStatus = status === filterStatus;
-      }
-      return matchesSearch && matchesStatus;
-    });
-  }, [buildings, searchTerm, filterStatus]);
-
-  // --- HANDLERS (THÊM, SỬA, XÓA, CHI TIẾT) ---
-
+  // 2. Add Building
   const handleAddBuilding = async (newBuildingData) => {
     try {
-      await buildingService.create(newBuildingData);
-      await fetchBuildings();
-      // Thay alert bằng toast
-      toast.success("Thêm toà nhà thành công!");
+      const response = await buildingService.create(newBuildingData);
+      if (response && (response.code === 200 || response.code === 201 || response.message)) {
+          toast.success("Thêm toà nhà thành công!");
+          await fetchBuildings();
+          setIsAddModalOpen(false);
+      } else {
+          toast.error("Thêm thất bại: Phản hồi không hợp lệ");
+      }
     } catch (error) {
       console.error("Lỗi thêm mới:", error);
-      const msg = error.response?.data?.detail?.[0]?.msg || "Lỗi khi thêm tòa nhà!";
-      // Thay alert bằng toast
-      toast.error("Thêm thất bại: " + msg);
+      const msg = error.response?.data?.detail?.[0]?.msg || error.response?.data?.message || "Lỗi khi thêm tòa nhà!";
+      toast.error(msg);
     }
   };
 
-  // Mở modal sửa
+  // --- [FIX] THÊM HÀM handleEditClick ---
   const handleEditClick = (building) => {
+    if (!building) return;
     setSelectedBuilding(building);
     setIsEditModalOpen(true);
   };
 
-  // Thực hiện cập nhật
+  // 3. Update Building
   const handleUpdateBuilding = async (id, updatedData) => {
     try {
-      await buildingService.update(id, updatedData);
-      await fetchBuildings();
-      // Thay alert bằng toast
-      toast.success("Cập nhật thành công!");
+      const response = await buildingService.update(id, updatedData);
+      if (response && (response.code === 200 || response.data)) {
+          toast.success("Cập nhật thành công!");
+          await fetchBuildings();
+          setIsEditModalOpen(false);
+      } else {
+          toast.error("Cập nhật thất bại");
+      }
     } catch (error) {
       console.error("Lỗi cập nhật:", error);
-      const msg = error.response?.data?.detail?.[0]?.msg || "Lỗi khi cập nhật!";
-      // Thay alert bằng toast
-      toast.error("Cập nhật thất bại: " + msg);
-      throw error;
+      const msg = error.response?.data?.detail?.[0]?.msg || error.response?.data?.message || "Lỗi khi cập nhật!";
+      toast.error(msg);
+      throw error; 
     }
   };
 
+  // 4. View Detail
   const handleViewDetail = async (id) => {
     setIsDetailModalOpen(true);
     setLoadingDetail(true);
@@ -201,9 +146,10 @@ const BuildingManagement = () => {
 
     try {
         const response = await buildingService.getById(id);
-        console.log(response)
         if (response && response.data) {
             setDetailBuildingData(response.data);
+        } else {
+            toast.error("Không tìm thấy thông tin chi tiết");
         }
     } catch (error) {
         console.error("Lỗi lấy chi tiết:", error);
@@ -213,7 +159,7 @@ const BuildingManagement = () => {
     }
   };
 
-  // --- LOGIC XÓA (Đã cập nhật dùng Modal + Sonner) ---
+  // 5. Delete Building
   const handleDeleteClick = (building) => {
     setBuildingToDelete(building);
     setDeleteModalOpen(true);
@@ -221,11 +167,14 @@ const BuildingManagement = () => {
 
   const confirmDelete = async () => {
     if (!buildingToDelete) return;
-
     try {
-      await buildingService.delete(buildingToDelete.id);
-      setBuildings(buildings.filter((item) => item.id !== buildingToDelete.id));
-      toast.success("Đã xóa tòa nhà thành công!");
+      const response = await buildingService.delete(buildingToDelete.id);
+      if (response && (response.code === 200 || !response.code)) { 
+          toast.success("Đã xóa tòa nhà thành công!");
+          setBuildings((prev) => prev.filter((item) => item.id !== buildingToDelete.id));
+      } else {
+          toast.error("Xóa thất bại!");
+      }
     } catch (error) {
       console.error("Lỗi xóa:", error);
       const msg = error.response?.data?.detail || "Xóa thất bại!";
@@ -236,16 +185,58 @@ const BuildingManagement = () => {
     }
   };
 
-  // Pagination
+  // --- HELPER UI ---
+  const getStatusLabel = (status) => {
+    switch (status) {
+      case "ACTIVE": return "Hoạt động";
+      case "INACTIVE": return "Ngừng hoạt động";
+      case "SUSPENDED": return "Tạm dừng";
+      default: return status;
+    }
+  };
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case "ACTIVE": return "text-green-600 bg-green-100";
+      case "SUSPENDED": return "text-yellow-600 bg-yellow-100";
+      case "INACTIVE": return "text-gray-600 bg-gray-300";
+      default: return "text-gray-600 bg-gray-300";
+    }
+  };
+
+  const extractUtilities = (description) => {
+    if (!description) return "---";
+    const match = description.match(/\[Tiện ích: (.*?)\]/);
+    if (match && match[1]) {
+      const utilsList = match[1].split(",");
+      if (utilsList.length > 2) return utilsList.slice(0, 2).join(", ").trim() + "..."; 
+      return match[1];
+    }
+    return "---";
+  };
+
+  // --- FILTER & PAGINATION ---
+  const filteredBuildings = useMemo(() => {
+    if (!Array.isArray(buildings)) return [];
+    return buildings.filter((building) => {
+      const name = building.building_name || "";
+      const address = building.address_line || "";
+      const status = building.status || "";
+      const matchesSearch = name.toLowerCase().includes(searchTerm.toLowerCase()) || address.toLowerCase().includes(searchTerm.toLowerCase());
+      let matchesStatus = true;
+      if (filterStatus) {
+        if (filterStatus === "Hoạt động") matchesStatus = status === "ACTIVE";
+        else matchesStatus = status === filterStatus;
+      }
+      return matchesSearch && matchesStatus;
+    });
+  }, [buildings, searchTerm, filterStatus]);
+
   const totalPages = Math.ceil(filteredBuildings.length / itemsPerPage);
-  const currentData = filteredBuildings.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
+  const currentData = filteredBuildings.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans relative">
-      {/* 2. Thêm Toaster */}
       <Toaster position="top-right" richColors />
 
       {/* HEADER */}
@@ -275,9 +266,7 @@ const BuildingManagement = () => {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            <button className="ml-2 bg-gray-900 text-white px-4 py-2 rounded-md text-sm hover:bg-gray-800 font-medium">
-              Tìm
-            </button>
+            <button className="ml-2 bg-gray-900 text-white px-4 py-2 rounded-md text-sm hover:bg-gray-800 font-medium">Tìm</button>
           </div>
           <div className="flex gap-2 w-full md:w-auto justify-end">
             <div className="relative w-full md:w-48">
@@ -302,7 +291,6 @@ const BuildingManagement = () => {
         <div className="p-4 border-b border-gray-100 flex justify-between items-center">
           <h3 className="text-lg font-bold text-gray-800">Danh sách toà nhà</h3>
         </div>
-
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead className="bg-white text-xs font-bold border-b border-gray-200 uppercase">
@@ -320,75 +308,41 @@ const BuildingManagement = () => {
             </thead>
             <tbody className="text-sm text-gray-700 divide-y divide-gray-100">
               {loading ? (
-                <tr>
-                  <td colSpan="9" className="p-8 text-center">
-                    Đang tải dữ liệu...
-                  </td>
-                </tr>
+                <tr><td colSpan="9" className="p-8 text-center">Đang tải dữ liệu...</td></tr>
               ) : currentData.length > 0 ? (
                 currentData.map((item) => (
-                  <tr
-                    key={item.id}
-                    className="hover:bg-gray-50 transition-colors group"
-                  >
-                    <td 
-                        className="p-4 font-semibold text-gray-900 cursor-pointer hover:text-blue-600 transition-colors"
-                        onClick={() => handleViewDetail(item.id)}
-                        title="Xem chi tiết"
-                    >
+                  <tr key={item.id} className="hover:bg-gray-50 transition-colors group">
+                    <td className="p-4 font-semibold text-gray-900 cursor-pointer hover:text-blue-600" onClick={() => handleViewDetail(item.id)}>
                       <div className="flex items-center gap-2">
-                        <div className="bg-gray-100 p-2 rounded text-gray-500 group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors">
-                          <FaBuilding size={14} />
-                        </div>
+                        <div className="bg-gray-100 p-2 rounded text-gray-500 group-hover:bg-blue-100 group-hover:text-blue-600"><FaBuilding size={14} /></div>
                         {item.building_name}
                       </div>
                     </td>
-
-                    <td className="p-4 text-sm max-w-[200px] truncate" title={item.address_line}>
-                      {item.address_line}
-                    </td>
-                    <td className="p-4 text-center font-medium">
-                      {item.total_rooms}
-                    </td>
-                    <td className="p-4 text-center text-red-500 font-bold">
-                      {item.available_rooms}
-                    </td>
-                    <td className="p-4 text-center text-green-600 font-bold">
-                      {item.rented_rooms}
-                    </td>
-                    <td className="p-4 text-gray-500 text-sm">
-                      <span className="truncate block max-w-[150px]">
-                        {extractUtilities(item.description)}
-                      </span>
-                    </td>
-
+                    <td className="p-4 text-sm max-w-[200px] truncate" title={item.address_line}>{item.address_line}</td>
+                    <td className="p-4 text-center font-medium">{item.total_rooms}</td>
+                    <td className="p-4 text-center text-red-500 font-bold">{item.available_rooms}</td>
+                    <td className="p-4 text-center text-green-600 font-bold">{item.rented_rooms}</td>
+                    <td className="p-4 text-gray-500 text-sm"><span className="truncate block max-w-[150px]">{extractUtilities(item.description)}</span></td>
                     <td className="p-4 text-center">
-                      <span
-                        className={`px-2 py-1 rounded-full text-xs font-bold whitespace-nowrap ${getStatusColor(
-                          item.status
-                        )}`}
-                      >
-                        {getStatusLabel(item.status)}
-                      </span>
+                      <span className={`px-2 py-1 rounded-full text-xs font-bold whitespace-nowrap ${getStatusColor(item.status)}`}>{getStatusLabel(item.status)}</span>
                     </td>
-                    <td className="p-4 text-gray-500">
-                      {item.created_at
-                        ? new Date(item.created_at).toLocaleDateString("vi-VN")
-                        : "-"}
-                    </td>
-
+                    <td className="p-4 text-gray-500">{item.created_at ? new Date(item.created_at).toLocaleDateString("vi-VN") : "-"}</td>
                     <td className="p-4">
                       <div className="flex justify-center gap-2">
                         <button
-                          onClick={() => handleEditClick(item)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditClick(item); // Gọi hàm đã được thêm lại
+                          }}
                           className="p-2 border border-gray-200 rounded hover:bg-gray-900 hover:text-white text-gray-500 transition-all shadow-sm"
                         >
                           <FaEdit size={14} />
                         </button>
-
                         <button
-                          // Thay đổi gọi hàm xóa trực tiếp bằng hàm mở Modal
-                          onClick={() => handleDeleteClick(item)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteClick(item);
+                          }}
                           className="p-2 border border-red-100 rounded hover:bg-red-500 hover:text-white text-red-500 transition-all shadow-sm bg-red-50"
                         >
                           <FaTrashAlt size={14} />
@@ -398,11 +352,7 @@ const BuildingManagement = () => {
                   </tr>
                 ))
               ) : (
-                <tr>
-                  <td colSpan="9" className="p-8 text-center text-gray-500">
-                    Không tìm thấy toà nhà nào phù hợp.
-                  </td>
-                </tr>
+                <tr><td colSpan="9" className="p-8 text-center text-gray-500">Không tìm thấy toà nhà nào phù hợp.</td></tr>
               )}
             </tbody>
           </table>
@@ -410,78 +360,35 @@ const BuildingManagement = () => {
 
         {/* PAGINATION */}
         <div className="p-4 bg-white flex flex-col sm:flex-row justify-between items-center gap-4">
-          <span className="text-xs text-gray-500 font-medium">
-            Hiển thị {currentData.length} trên tổng số{" "}
-            {filteredBuildings.length} tòa nhà
-          </span>
-
+          <span className="text-xs text-gray-500 font-medium">Hiển thị {currentData.length} trên tổng số {filteredBuildings.length} tòa nhà</span>
           <div className="flex items-center gap-1">
-            <button
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-              className="px-3 py-1.5 rounded-md text-sm font-medium transition-colors 
-                 text-gray-600 hover:bg-gray-100 
-                 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-            >
-              <FiChevronLeft /> Prev
-            </button>
-
+            <button onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1} className="px-3 py-1.5 rounded-md text-sm font-medium transition-colors text-gray-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"><FiChevronLeft /> Prev</button>
             {[...Array(totalPages)].map((_, idx) => (
-              <button
-                key={idx}
-                onClick={() => setCurrentPage(idx + 1)}
-                className={`px-3 py-1 rounded text-sm ${
-                  currentPage === idx + 1
-                    ? "bg-gray-100 text-black font-medium"
-                    : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"
-                }`}
-              >
-                {idx + 1}
-              </button>
+              <button key={idx} onClick={() => setCurrentPage(idx + 1)} className={`px-3 py-1 rounded text-sm ${currentPage === idx + 1 ? "bg-gray-100 text-black font-medium" : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"}`}>{idx + 1}</button>
             ))}
-
-            <button
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages}
-              className="px-3 py-1.5 rounded-md text-sm font-medium transition-colors text-gray-600 hover:bg-gray-100 
-                 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-            >
-              Next <FiChevronRight />
-            </button>
+            <button onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages || totalPages === 0} className="px-3 py-1.5 rounded-md text-sm font-medium transition-colors text-gray-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1">Next <FiChevronRight /></button>
           </div>
         </div>
       </div>
 
-      {/* --- ADD MODAL --- */}
-      <AddBuildingModal
-        isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
-        onAddSuccess={handleAddBuilding}
-      />
+      {/* --- MODALS --- */}
+      <AddBuildingModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} onAddSuccess={handleAddBuilding} />
+      
+      {/* SỬA: Bọc điều kiện render EditModal */}
+      {isEditModalOpen && selectedBuilding && (
+        <EditBuildingModal 
+            isOpen={isEditModalOpen} 
+            onClose={() => {
+                setIsEditModalOpen(false);
+                setSelectedBuilding(null);
+            }} 
+            buildingData={selectedBuilding} 
+            onUpdateSuccess={handleUpdateBuilding} 
+        />
+      )}
 
-      {/* --- EDIT MODAL --- */}
-      <EditBuildingModal
-        isOpen={isEditModalOpen}
-        onClose={() => setIsEditModalOpen(false)}
-        buildingData={selectedBuilding}
-        onUpdateSuccess={handleUpdateBuilding}
-      />
-
-      {/* --- DETAIL MODAL --- */}
-      <BuildingDetailModal
-        isOpen={isDetailModalOpen}
-        onClose={() => setIsDetailModalOpen(false)}
-        building={detailBuildingData}
-        loading={loadingDetail}
-      />
-
-      {/* --- DELETE MODAL (MỚI) --- */}
-      <DeleteConfirmationModal
-        isOpen={deleteModalOpen}
-        onClose={() => setDeleteModalOpen(false)}
-        onConfirm={confirmDelete}
-        itemName={buildingToDelete?.building_name}
-      />
+      <BuildingDetailModal isOpen={isDetailModalOpen} onClose={() => setIsDetailModalOpen(false)} building={detailBuildingData} loading={loadingDetail} />
+      <DeleteConfirmationModal isOpen={deleteModalOpen} onClose={() => setDeleteModalOpen(false)} onConfirm={confirmDelete} itemName={buildingToDelete?.building_name} />
     </div>
   );
 };
