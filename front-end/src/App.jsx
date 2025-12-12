@@ -5,7 +5,7 @@ import { useAuth } from "./context/AuthContext";
 
 function App() {
   const { user, logout } = useAuth();
-  const currentRole = user ? user.role : 'guest';
+  const currentRole = user?.role || 'CUSTOMER';
 
   return (
     <div className="flex flex-col h-screen w-full bg-slate-50 overflow-hidden">

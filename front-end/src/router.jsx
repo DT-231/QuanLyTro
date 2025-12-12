@@ -1,7 +1,7 @@
 import { createBrowserRouter } from "react-router-dom";
 
 // --- Layouts ---
-import App from "./App"; 
+import App from "./App";
 import AdminLayout from "./components/layouts/AdminLayout";
 import MemberLayout from "./components/layouts/MemberLayout";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -27,7 +27,7 @@ import ProfilePage from "./pages/member/ProfilePage";
 const router = createBrowserRouter([
   {
     path: "/",
-    element: <App />, 
+    element: <App />,
     children: [
       // 1. PUBLIC ROUTES
       { index: true, element: <HomePage /> },
@@ -52,15 +52,15 @@ const router = createBrowserRouter([
   // 3. ADMIN ROUTES 
   {
     path: "/admin",
-    element: <ProtectedRoute allowedRoles={['admin']}><AdminLayout /></ProtectedRoute>,
+    element: <ProtectedRoute allowedRoles={['ADMIN']}><AdminLayout /></ProtectedRoute>,
     children: [
-      { path: "dashboard", element: <DashboardAdmin/> },
+      { path: "dashboard", element: <DashboardAdmin /> },
       { path: "users", element: <AccountManagement /> },
-      { path: "buildings", element:<BuildingManagement/> },
-      { path: "rooms", element: <RoomManagement/> },
-      { path: "invoices", element:<InvoiceManagement/> },
-      { path: "contracts", element: <ContractManagement/>},
-      { path: "incidents", element: <IssueManagement/> },
+      { path: "buildings", element: <BuildingManagement /> },
+      { path: "rooms", element: <RoomManagement /> },
+      { path: "invoices", element: <InvoiceManagement /> },
+      { path: "contracts", element: <ContractManagement /> },
+      { path: "incidents", element: <IssueManagement /> },
     ]
   },
 
