@@ -1,4 +1,3 @@
-import time
 from typing import Generic
 from annotated_types import T
 from fastapi import APIRouter, Depends
@@ -45,7 +44,8 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
     if not user_data.email or not user_data.email.strip():
         return response.bad_request(message="Email không được để trống")
     try:
-        validate_email(user_data.email)
+        # check_deliverability=False: Tắt DNS lookup để tránh chậm
+        validate_email(user_data.email, check_deliverability=False)
     except Exception:
         return response.bad_request(message="Email không đúng định dạng")
     if not user_data.password:
@@ -83,13 +83,16 @@ async def login(credentials: UserLogin, db: Session = Depends(get_db)):
     - **password**: Mật khẩu (tối thiểu 6 ký tự)
 
     """
-    
     email = credentials.email
     password = credentials.password
+    
     if not email or not password:
         return response.bad_request(message="email và mật khẩu không được để trống")
 
-    if not validate_email(email):
+    try:
+        # check_deliverability=False: Tắt DNS lookup để tránh chậm (6s+ → <1ms)
+        validate_email(email, check_deliverability=False)
+    except Exception:
         return response.bad_request(message="email không đúng định dạng")
 
     # Validate password strength
@@ -99,9 +102,10 @@ async def login(credentials: UserLogin, db: Session = Depends(get_db)):
 
     auth_service = AuthService(db)
     auth = auth_service.login(email, password)
+    
     if not auth:
         return response.unauthorized(message="Sai mật khẩu hoặc email")
-
+    
     return response.success(
         message="Đăng nhập thành công",
         data=auth,

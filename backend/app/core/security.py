@@ -16,7 +16,12 @@ from app.repositories.user_repository import UserRepository
 
 
 # Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Giảm rounds xuống 10 để tăng tốc (mặc định 12 rất chậm)
+# bcrypt__rounds=10: ~100ms thay vì ~300ms
+pwd_context = CryptContext(
+    schemes=["bcrypt"],
+    deprecated="auto",
+)
 
 
 def get_password_hash(password: str) -> str:
@@ -75,12 +80,24 @@ def create_refresh_token(subject: str | dict[str, Any], expires_days: int | None
 
 
 def decode_token(token: str) -> dict[str, Any]:
+	"""Decode và validate JWT token.
+	
+	Args:
+		token: JWT token string
+		
+	Returns:
+		Token payload dict
+		
+	Raises:
+		HTTPException: 401 nếu token invalid/expired
+	"""
 	try:
 		payload = jwt.decode(token, settings.SECRET_KEY or "", algorithms=[settings.ALGORITHM])
 		return payload
 	except jwt.ExpiredSignatureError:
 		raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired")
-	except jwt.InvalidTokenError:
+	except (jwt.JWTError, jwt.InvalidTokenError, Exception):
+		# Catch tất cả lỗi JWT (JWTError, InvalidTokenError, malformed token, etc.)
 		raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
 

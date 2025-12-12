@@ -61,16 +61,18 @@ class AuthService:
         user = self.user_repo.get_by_email(email)
         if not user:
             return None
+
         if not verify_password(password, user.password):
             return None
 
         access = create_access_token(str(user.id))
         refresh = create_refresh_token(str(user.id))
+
         return {
             "user": {
                 "id":user.id,
                 "email":user.email,
-                "role" :user.role.role_name,
+                "role" :user.role.role_code,
                 "last_name":user.last_name,
                 "first_name":user.first_name,
             },

@@ -5,6 +5,16 @@ Khởi tạo và cấu hình FastAPI application cho hệ thống quản lý ph�
 
 from __future__ import annotations
 
+import logging
+import sys
+
+# Cấu hình logging để hiển thị timing logs
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(levelname)s:\t%(name)s - %(message)s',
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError, HTTPException
 from fastapi.responses import JSONResponse
