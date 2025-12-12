@@ -6,7 +6,7 @@ import { Plus } from "lucide-react";
 import { FaSave } from "react-icons/fa";
 
 // Import Service
-import { addressService } from "@/services/addressService"; 
+import { buildingService } from "@/services/buildingService";
 import AddUtilityModal from "../utility/AddUtilityModal";
 
 import {
@@ -125,62 +125,37 @@ export default function EditBuildingModal({ isOpen, onClose, onUpdateSuccess, bu
   const onSubmit = async (values) => {
     setIsSaving(true);
     try {
-        // 1. Chuẩn bị dữ liệu
         const selectedUtils = utilities.filter(u => u.checked).map(u => u.label).join(", ");
         let finalDescription = values.description || "";
         if (selectedUtils) finalDescription += ` \n[Tiện ích: ${selectedUtils}]`;
 
+        // 2. Chuẩn bị dữ liệu địa chỉ
         const streetLine = [values.houseNumber, values.street].filter(Boolean).join(" ");
+        // Tạo chuỗi full address để hiển thị ngay lập tức ở UI nếu cần
         const fullAddressDisplay = [streetLine, values.ward, values.city, "Vietnam"].filter(Boolean).join(", ");
 
-        // 2. Nếu có address_id thì gọi update riêng (Trường hợp hy hữu data đầy đủ)
-        if (buildingData.address_id) {
-            try {
-                await addressService.update(buildingData.address_id, {
-                    address_line: streetLine,
-                    ward: values.ward,
-                    city: values.city,
-                    country: "Vietnam",
-                    full_address: fullAddressDisplay
-                });
-            } catch (e) { console.error("Lỗi update address service", e)}
-        }
-        const buildingPayload = {
+        const updatePayload = {
           building_code: buildingData.building_code,
           building_name: values.name,
           description: finalDescription.trim(),
           status: values.status,
-          address: {
+          address_data: {
              address_line: streetLine,
              ward: values.ward,
              city: values.city,
              country: "Vietnam",
              full_address: fullAddressDisplay
-          },
-
-        
-          address_line: fullAddressDisplay, 
-          ward: values.ward,               
-          city: values.city,
-          street: streetLine
+          }
         };
-
-    
-        if (onUpdateSuccess && buildingData) {
-          
-            const manualDataForUI = {
-                ...buildingData,
-                ...buildingPayload,
-                address_line: fullAddressDisplay 
-            };
-            
-            await onUpdateSuccess(buildingData.id, manualDataForUI);
+        if (onUpdateSuccess) {
+            await onUpdateSuccess(buildingData.id, updatePayload);
         }
         
         onClose();
     } catch (error) {
         console.error("Lỗi khi lưu:", error);
-        alert("Có lỗi xảy ra khi lưu thay đổi.");
+        const errorMsg = error?.response?.data?.message || "Có lỗi xảy ra khi lưu thay đổi.";
+        alert(errorMsg);
     } finally {
         setIsSaving(false);
     }

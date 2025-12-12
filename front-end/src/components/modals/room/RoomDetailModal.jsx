@@ -37,7 +37,6 @@ const RoomDetailModal = ({ isOpen, onClose, room, loading }) => {
 
   const roomImages = useMemo(() => {
     if (!room) return [];
-    // Ưu tiên lấy từ API thực tế
     if (room.images && Array.isArray(room.images)) return room.images;
     if (room.photo_urls && Array.isArray(room.photo_urls)) return room.photo_urls;
 
