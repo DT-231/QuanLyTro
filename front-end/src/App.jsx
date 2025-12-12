@@ -42,7 +42,7 @@ function App() {
       </div>
       <div className="flex flex-1 overflow-hidden">
         {/* ========== SIDEBAR ========== */}
-        <Sidebar role={role} />
+        <Sidebar role={currentRole} />
 
         {/* ========== MAIN CONTENT ========== */}
         <main className="flex-1 flex flex-col relative overflow-hidden">
@@ -63,7 +63,7 @@ function App() {
                 />
 
                 {/* ===== ADMIN ROUTES ===== */}
-                {role === "admin" && (
+                {currentRole === "admin" && (
                   <>
                     <Route
                       path="/admin/dashboard"
@@ -94,7 +94,7 @@ function App() {
                 )}
 
                 {/* ===== MEMBER ROUTES ===== */}
-                {role === "user" && (
+                {currentRole === "user" && (
                   <>
                     <Route path="/member/profile" element={<ProfilePage />} />
                     <Route

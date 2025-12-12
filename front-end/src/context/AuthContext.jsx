@@ -32,8 +32,8 @@ export function AuthProvider({ children }) {
 
   const login = (userData, tokenData) => {
     // Set state ngay lập tức - không cần đợi useEffect
-    setUser(JSON.parse(userData));
-    setToken(JSON.parse(tokenData));
+    setUser(userData);
+    setToken(tokenData);
     // Lưu vào localStorage
     localStorage.setItem('user', JSON.stringify(userData));
     localStorage.setItem('token', JSON.stringify(tokenData));
