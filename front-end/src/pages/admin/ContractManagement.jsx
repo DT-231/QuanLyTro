@@ -18,7 +18,7 @@ import { contractService } from "@/services/contractService";
 import { buildingService } from "@/services/buildingService"; 
 // --- COMPONENT: Modal Xóa ---
 import DeleteConfirmationModal from "@/components/modals/DeleteConfirmationModal";
-
+import Pagination from "@/components/Pagination";
 const ContractManagement = () => {
   // --- 1. STATES QUẢN LÝ DỮ LIỆU ---
   const [contracts, setContracts] = useState([]); 
@@ -397,54 +397,14 @@ const ContractManagement = () => {
           </table>
         </div>
 
-        {/* PAGINATION */}
-        <div className="p-4 bg-white flex flex-col sm:flex-row justify-between items-center gap-4 border-t border-gray-100">
-          <span className="text-xs text-gray-500 font-medium">
-            Trang {currentPage} / {totalPages}
-          </span>
-
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-              className="px-3 py-1.5 rounded-md text-sm font-medium transition-colors text-gray-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-            >
-              <FiChevronLeft /> Prev
-            </button>
-
-            {[...Array(Math.min(5, totalPages))].map((_, idx) => {
-               let pageNum = idx + 1;
-               if (totalPages > 5 && currentPage > 3) {
-                 pageNum = currentPage - 2 + idx;
-                 if (pageNum > totalPages) return null;
-               }
-               if (!pageNum) return null;
-
-               return (
-                <button
-                  key={pageNum}
-                  onClick={() => setCurrentPage(pageNum)}
-                  className={`px-3 py-1 rounded text-sm transition-all ${
-                    currentPage === pageNum
-                      ? "bg-gray-100 text-black font-medium"
-                      : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"
-                  }`}
-                >
-                  {pageNum}
-                </button>
-               )
-            })}
-
-            <button
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages || totalPages === 0}
-              className="px-3 py-1.5 rounded-md text-sm font-medium transition-colors text-gray-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-            >
-              Next <FiChevronRight />
-            </button>
-          </div>
-        </div>
-      </div>
+        <Pagination 
+            currentPage={currentPage}
+            totalPages={totalPages}
+            // totalItems={totalItems} // Nếu API contract trả về total, bạn truyền vào đây
+            onPageChange={setCurrentPage}
+            label="hợp đồng"
+          />
+       </div>
 
       <AddContractModal
         isOpen={isAddModalOpen}

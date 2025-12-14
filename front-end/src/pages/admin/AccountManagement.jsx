@@ -1,112 +1,172 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { FaSearch, FaEdit, FaTrashAlt, FaPlus } from "react-icons/fa";
 import { FiFilter, FiChevronLeft, FiChevronRight } from "react-icons/fi";
-
 import { Toaster, toast } from "sonner";
 
-// Import Component Modal
+// Services
+import { userService } from "@/services/userService";
+
+// Components
 import AddTenantModal from "@/components/modals/tenant/AddTenantModal";
 import DeleteConfirmationModal from "@/components/modals/DeleteConfirmationModal";
+import Pagination from "@/components/Pagination";
 
 const AccountManagement = () => {
-  // Mock Data
-  const mockTenants = [
-    { id: 101, name: "Phan Mạnh Quỳnh", phone: "0256662848", email: "nguyen@gmail.com", gender: "Nam", hometown: "Lâm Đồng", status: "Chưa thuê" },
-    { id: 110, name: "Lâm Minh Phú", phone: "0575998517", email: "lehoanganh@gmail.com", gender: "Nữ", hometown: "Đà Nẵng", status: "Đang thuê" },
-    { id: 220, name: "Lý Thành Ân", phone: "0258551415", email: "tranducminh@gmail.com", gender: "Nữ", hometown: "Hà Nội", status: "Đang thuê" },
-    { id: 430, name: "Đinh Bảo Toàn", phone: "0585542584", email: "kimphuong97@gmail.com", gender: "Nam", hometown: "Quảng Nam", status: "Chưa có giấy tờ" },
-    { id: 550, name: "Nguyễn Việt Dũng", phone: "0845228547", email: "hoanglong@gmail.com", gender: "Nam", hometown: "Phú Yên", status: "Đang thuê" },
-  ];
+  // --- STATES ---
+  const [tenants, setTenants] = useState([]);
+  const [stats, setStats] = useState({
+    total_tenants: 0,
+    active_tenants: 0,
+    returned_rooms: 0,
+    not_rented: 0,
+  });
+  const [loading, setLoading] = useState(true);
 
-  // States
-  const [tenants, setTenants] = useState(mockTenants);
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-
-  // --- STATES CHO XÓA ---
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [tenantToDelete, setTenantToDelete] = useState(null);
-
-  // --- STATES CHO TÌM KIẾM & LỌC ---
+  // --- FILTERS & PAGINATION ---
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [filterGender, setFilterGender] = useState("");
+
   const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
   const itemsPerPage = 5;
 
-  // Logic Lọc
-  const filteredTenants = useMemo(() => {
-    return tenants.filter((tenant) => {
-      const matchesSearch =
-        tenant.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        tenant.phone.includes(searchTerm) ||
-        tenant.hometown.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesStatus = filterStatus ? tenant.status === filterStatus : true;
-      const matchesGender = filterGender ? tenant.gender === filterGender : true;
-      return matchesSearch && matchesStatus && matchesGender;
-    });
-  }, [tenants, searchTerm, filterStatus, filterGender]);
+  // --- MODALS ---
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [tenantToEdit, setTenantToEdit] = useState(null);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [tenantToDelete, setTenantToDelete] = useState(null);
 
-  const totalPages = Math.ceil(filteredTenants.length / itemsPerPage);
-  const currentData = filteredTenants.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
-
-  // Hàm thêm khách mới
-  const handleAddTenant = (newTenant) => {
-    const newId = Math.floor(Math.random() * 1000) + 1000;
-    const tenantToAdd = {
-      id: newId,
-      name: newTenant.fullName,
-      phone: newTenant.phone,
-      email: newTenant.email || "Chưa cập nhật",
-      gender: newTenant.gender || "Khác",
-      hometown: newTenant.hometown || "Chưa cập nhật",
-      status: "Chưa thuê",
-    };
-    setTenants([...tenants, tenantToAdd]);
-    toast.success("Thêm khách thuê thành công!");
+  // --- API CALLS ---
+  const fetchStats = async () => {
+    try {
+      const data = await userService.getStats();
+      if (data) setStats(data);
+    } catch (error) {
+      console.error("Lỗi stats:", error);
+    }
   };
 
-  // --- LOGIC XÓA ---
+  const fetchTenants = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = {
+        offset: (currentPage - 1) * itemsPerPage,
+        limit: itemsPerPage,
+        search: searchTerm || null,
+        status:
+          filterStatus === "Đang thuê"
+            ? "ACTIVE"
+            : filterStatus === "Chưa thuê"
+            ? "INACTIVE"
+            : null,
+        gender: filterGender || null,
+      };
+
+      const res = await userService.getAll(params);
+
+      if (res && res.items) {
+        setTenants(res.items);
+        setTotalItems(res.total || 0);
+        setTotalPages(Math.ceil((res.total || 0) / itemsPerPage) || 1);
+      } else {
+        setTenants([]);
+      }
+    } catch (error) {
+      console.error("Lỗi lấy danh sách:", error);
+      toast.error("Không thể tải danh sách khách thuê");
+    } finally {
+      setLoading(false);
+    }
+  }, [currentPage, searchTerm, filterStatus, filterGender]);
+
+  // Init
+  useEffect(() => {
+    fetchStats();
+  }, []);
+
+  // Debounce search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchTenants();
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [fetchTenants]);
+
+  // --- HANDLERS ---
+  const handleOpenAdd = () => {
+    setTenantToEdit(null);
+    setIsAddModalOpen(true);
+  };
+
+  const handleOpenEdit = (tenant) => {
+    setTenantToEdit(tenant);
+    setIsAddModalOpen(true);
+  };
+
+  const handleSuccess = () => {
+    fetchTenants();
+    fetchStats();
+  };
+
   const handleDeleteClick = (tenant) => {
     setTenantToDelete(tenant);
     setDeleteModalOpen(true);
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (tenantToDelete) {
-      setTenants((prev) => prev.filter((t) => t.id !== tenantToDelete.id));
-      toast.success(`Đã xóa khách thuê: ${tenantToDelete.name}`);
-      setDeleteModalOpen(false);
-      setTenantToDelete(null);
+      try {
+        await userService.delete(tenantToDelete.id);
+        toast.success(
+          `Đã xóa: ${tenantToDelete.full_name || tenantToDelete.name}`
+        );
+        fetchTenants();
+        fetchStats();
+      } catch (error) {
+        toast.error("Không thể xóa khách thuê này.");
+      } finally {
+        setDeleteModalOpen(false);
+        setTenantToDelete(null);
+      }
     }
   };
 
+  // Helpers
   const getStatusColor = (status) => {
     switch (status) {
-      case "Chưa thuê": return "bg-red-500 text-white";
-      case "Đang thuê": return "bg-green-500 text-white";
-      case "Chưa có giấy tờ": return "bg-yellow-400 text-gray-800";
-      default: return "bg-gray-200 text-gray-800";
+      case "ACTIVE":
+        return "bg-green-500 text-white";
+      case "INACTIVE":
+        return "bg-red-500 text-white";
+      default:
+        return "bg-gray-200 text-gray-800";
     }
+  };
+
+  const getStatusLabel = (status) => {
+    if (status === "ACTIVE") return "Đang thuê";
+    if (status === "INACTIVE") return "Chưa thuê";
+    return status || "Chưa xác định";
   };
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans relative">
+      <Toaster position="top-right" richColors />
 
       {/* Header */}
       <div className="flex justify-between items-center mb-4">
         <h1 className="text-3xl font-bold text-gray-800">Quản lý tài khoản</h1>
         <button
-          onClick={() => setIsAddModalOpen(true)}
+          onClick={handleOpenAdd}
           className="flex items-center gap-2 bg-gray-900 hover:bg-gray-800 text-white px-3 py-2 rounded-lg text-sm transition-all"
         >
           <FaPlus size={10} /> Thêm khách thuê
         </button>
       </div>
 
-      {/* --- KHU VỰC TÌM KIẾM & LỌC --- */}
+      {/* FILTER */}
       <div className="bg-white p-3 rounded-lg shadow-sm mb-4">
         <div className="flex flex-col md:flex-row justify-between items-center gap-3">
           <div className="relative w-full md:w-1/2 flex items-center">
@@ -117,7 +177,7 @@ const AccountManagement = () => {
               <input
                 type="text"
                 className="w-full pl-9 pr-3 py-1.5 border border-gray-200 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 bg-gray-50"
-                placeholder="Lọc theo tên, SĐT, Quê quán..."
+                placeholder="Lọc theo tên, SĐT, Email..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
@@ -128,12 +188,14 @@ const AccountManagement = () => {
               <select
                 className="w-full appearance-none border border-gray-200 px-3 py-1 pr-8 rounded-md bg-white hover:bg-gray-50 text-sm focus:outline-none cursor-pointer text-gray-700"
                 value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
+                onChange={(e) => {
+                  setFilterStatus(e.target.value);
+                  setCurrentPage(1);
+                }}
               >
                 <option value="">Trạng thái</option>
                 <option value="Đang thuê">Đang thuê</option>
                 <option value="Chưa thuê">Chưa thuê</option>
-                <option value="Chưa có giấy tờ">Chưa có giấy tờ</option>
               </select>
               <FiFilter className="absolute right-3 top-2.5 text-gray-400 w-3 h-3 pointer-events-none" />
             </div>
@@ -141,7 +203,10 @@ const AccountManagement = () => {
               <select
                 className="w-full appearance-none border border-gray-200 px-3 py-1 pr-8 rounded-md bg-white hover:bg-gray-50 text-sm focus:outline-none cursor-pointer text-gray-700"
                 value={filterGender}
-                onChange={(e) => setFilterGender(e.target.value)}
+                onChange={(e) => {
+                  setFilterGender(e.target.value);
+                  setCurrentPage(1);
+                }}
               >
                 <option value="">Giới tính</option>
                 <option value="Nam">Nam</option>
@@ -153,15 +218,18 @@ const AccountManagement = () => {
         </div>
       </div>
 
-      {/* Stats Grid */}
+      {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
         {[
-          { title: "Tổng người thuê", value: tenants.length },
-          { title: "Đang Thuê", value: tenants.filter((t) => t.status === "Đang thuê").length },
-          { title: "Đã trả phòng", value: tenants.filter((t) => t.status === "Đã trả phòng").length },
-          { title: "Chưa thuê", value: tenants.filter((t) => t.status === "Chưa thuê").length },
+          { title: "Tổng người thuê", value: stats.total_tenants },
+          { title: "Đang Thuê", value: stats.active_tenants },
+          { title: "Đã trả phòng", value: stats.returned_rooms },
+          { title: "Chưa thuê", value: stats.not_rented || 0 },
         ].map((stat, index) => (
-          <div key={index} className="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
+          <div
+            key={index}
+            className="bg-white p-4 rounded-lg shadow-sm border border-gray-100"
+          >
             <h3 className="text-sm font-medium mb-1">{stat.title}</h3>
             <p className="text-2xl font-bold text-gray-800">{stat.value}</p>
           </div>
@@ -171,15 +239,16 @@ const AccountManagement = () => {
       {/* Table */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
         <div className="p-4 border-b border-gray-100">
-          <h3 className="text-base font-bold text-gray-800">Danh sách khách thuê</h3>
+          <h3 className="text-base font-bold text-gray-800">
+            Danh sách khách thuê
+          </h3>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead className="bg-white text-xs font-bold border-b border-gray-200 uppercase">
               <tr>
-                <th className="p-3">Mã</th>
-                <th className="p-3">Tên khách hàng</th>
-                <th className="p-3">Số điện thoại</th>
+                <th className="p-3">Họ và tên</th>
+                <th className="p-3">Liên hệ</th>
                 <th className="p-3">Gmail</th>
                 <th className="p-3">Giới tính</th>
                 <th className="p-3">Quê quán</th>
@@ -188,22 +257,45 @@ const AccountManagement = () => {
               </tr>
             </thead>
             <tbody className="text-sm text-gray-700 divide-y divide-gray-100">
-              {currentData.length > 0 ? (
-                currentData.map((tenant) => (
-                  <tr key={tenant.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="p-3 font-semibold text-gray-900">{tenant.id}</td>
-                    <td className="p-3 font-medium">{tenant.name}</td>
+              {loading ? (
+                <tr>
+                  <td colSpan="7" className="p-6 text-center text-gray-500">
+                    Đang tải dữ liệu...
+                  </td>
+                </tr>
+              ) : tenants.length > 0 ? (
+                tenants.map((tenant) => (
+                  <tr
+                    key={tenant.id}
+                    className="hover:bg-gray-50 transition-colors"
+                  >
+                    <td className="p-3 font-semibold text-gray-900">
+                      {tenant.full_name ||
+                        `${tenant.last_name} ${tenant.first_name}`}
+                      <div className="text-xs text-gray-400 font-normal">
+                        {tenant.code}
+                      </div>
+                    </td>
                     <td className="p-3">{tenant.phone}</td>
                     <td className="p-3 text-gray-500">{tenant.email}</td>
                     <td className="p-3">{tenant.gender}</td>
-                    <td className="p-3">{tenant.hometown}</td>
+                    <td className="p-3">
+                      {tenant.address || tenant.district || "--"}
+                    </td>
                     <td className="p-3 text-center">
-                      <span className={`${getStatusColor(tenant.status)} px-2 py-1 rounded-full text-[10px] font-semibold whitespace-nowrap`}>
-                        {tenant.status}
+                      <span
+                        className={`${getStatusColor(
+                          tenant.status
+                        )} px-2 py-1 rounded-full text-[10px] font-semibold whitespace-nowrap`}
+                      >
+                        {getStatusLabel(tenant.status)}
                       </span>
                     </td>
                     <td className="p-3 flex justify-center gap-2">
-                      <button className="p-1.5 border rounded hover:bg-gray-100 text-gray-600">
+                      <button
+                        onClick={() => handleOpenEdit(tenant)}
+                        className="p-1.5 border rounded hover:bg-gray-100 text-gray-600"
+                      >
                         <FaEdit size={12} />
                       </button>
                       <button
@@ -217,64 +309,36 @@ const AccountManagement = () => {
                 ))
               ) : (
                 <tr>
-                  <td colSpan="8" className="p-6 text-center text-gray-500">
-                    Không tìm thấy kết quả phù hợp
+                  <td colSpan="7" className="p-6 text-center text-gray-500">
+                    Không tìm thấy dữ liệu phù hợp
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
-        
-        {/* Pagination */}
-        <div className="p-4 bg-white flex flex-col sm:flex-row justify-between items-center gap-4">
-          <span className="text-xs text-gray-500 font-medium">
-            Hiển thị {currentData.length} trên tổng số {filteredTenants.length} khách thuê
-          </span>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-              className="px-3 py-1.5 rounded-md text-sm font-medium transition-colors text-gray-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-            >
-              <FiChevronLeft /> Prev
-            </button>
-            {[...Array(totalPages)].map((_, idx) => (
-              <button
-                key={idx}
-                onClick={() => setCurrentPage(idx + 1)}
-                className={`px-3 py-1 rounded text-sm ${
-                  currentPage === idx + 1
-                    ? "bg-gray-100 text-black font-medium"
-                    : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"
-                }`}
-              >
-                {idx + 1}
-              </button>
-            ))}
-            <button
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages || totalPages === 0}
-              className="px-3 py-1.5 rounded-md text-sm font-medium transition-colors text-gray-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-            >
-              Next <FiChevronRight />
-            </button>
-          </div>
-        </div>
+
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={setCurrentPage} 
+          totalItems={totalItems} 
+          itemName="khách thuê" 
+        />
       </div>
 
       <AddTenantModal
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
-        onAddSuccess={handleAddTenant}
+        onAddSuccess={handleSuccess}
+        tenantToEdit={tenantToEdit}
       />
 
-      {/* --- RENDER DIALOG XÁC NHẬN --- */}
-      <DeleteConfirmationModal 
+      <DeleteConfirmationModal
         isOpen={deleteModalOpen}
         onClose={() => setDeleteModalOpen(false)}
         onConfirm={confirmDelete}
-        itemName={tenantToDelete?.name}
+        itemName={tenantToDelete?.full_name || tenantToDelete?.name}
         itemType="Khách thuê"
       />
     </div>

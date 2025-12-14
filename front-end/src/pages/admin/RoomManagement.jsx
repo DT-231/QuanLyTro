@@ -18,7 +18,7 @@ import RoomDetailModal from "@/components/modals/room/RoomDetailModal";
 import { roomService } from "@/services/roomService";
 import { buildingService } from "@/services/buildingService";
 import DeleteConfirmationModal from "@/components/modals/DeleteConfirmationModal";
-
+import Pagination from "@/components/Pagination";
 const RoomManagement = () => {
   // 1. States
   const [rooms, setRooms] = useState([]);
@@ -111,7 +111,9 @@ const RoomManagement = () => {
   }, [rooms, searchTerm, filterBuilding, filterStatus]);
 
   // --- 4. PAGINATION LOGIC ---
-  const totalPages = Math.ceil(filteredRooms.length / itemsPerPage);
+  const totalItems = filteredRooms.length; 
+  const totalPages = Math.ceil(totalItems / itemsPerPage);
+  
   const currentData = filteredRooms.slice(
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage
@@ -437,42 +439,13 @@ const RoomManagement = () => {
           </table>
         </div>
 
-        {/* --- PAGINATION --- */}
-        <div className="p-4 bg-white flex flex-col sm:flex-row justify-between items-center gap-4 border-t border-gray-100">
-          <span className="text-xs text-gray-500 font-medium">
-            Hiển thị {currentData.length} trên tổng số {filteredRooms.length}{" "}
-            phòng
-          </span>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-              className="px-3 py-1.5 rounded-md text-sm font-medium transition-colors text-gray-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-            >
-              <FiChevronLeft /> Prev
-            </button>
-            {[...Array(totalPages)].map((_, idx) => (
-              <button
-                key={idx}
-                onClick={() => setCurrentPage(idx + 1)}
-                className={`px-3 py-1 rounded text-sm transition-all ${
-                  currentPage === idx + 1
-                    ? "bg-gray-100 text-black font-medium"
-                    : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"
-                }`}
-              >
-                {idx + 1}
-              </button>
-            ))}
-            <button
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages || totalPages === 0}
-              className="px-3 py-1.5 rounded-md text-sm font-medium transition-colors text-gray-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-            >
-              Next <FiChevronRight />
-            </button>
-          </div>
-        </div>
+        <Pagination 
+           currentPage={currentPage}
+           totalPages={totalPages}
+           totalItems={totalItems}
+           onPageChange={setCurrentPage} 
+           label="phòng"                 
+        />
       </div>
 
       {/* --- MODALS --- */}

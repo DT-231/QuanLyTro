@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -13,13 +13,15 @@ import {
   Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-import { authService } from "@/services/authService"; 
+// Import Service
+import { userService } from "@/services/userService"; 
 
 // --- SCHEMA VALIDATION ---
 const formSchema = z.object({
-  lastName: z.string().min(1, "Họ không được để trống"), // Tách riêng Họ
-  firstName: z.string().min(1, "Tên không được để trống"), // Tách riêng Tên
+  lastName: z.string().min(1, "Họ không được để trống"),
+  firstName: z.string().min(1, "Tên không được để trống"),
   phone: z.string().min(10, "Số điện thoại không hợp lệ"),
   email: z.string().email("Email không hợp lệ"), 
   dob: z.string().optional(),
@@ -28,24 +30,57 @@ const formSchema = z.object({
   hometown: z.string().optional(),
 });
 
-export default function AddTenantModal({ isOpen, onClose, onAddSuccess }) {
+export default function AddTenantModal({ isOpen, onClose, onAddSuccess, tenantToEdit }) {
   const [activeTab, setActiveTab] = useState("info");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [generatedPass, setGeneratedPass] = useState("");
+  const isEditMode = !!tenantToEdit;
 
   const [frontImage, setFrontImage] = useState(null); 
   const [backImage, setBackImage] = useState(null);   
   const frontInputRef = useRef(null);
   const backInputRef = useRef(null);
 
+  const defaultPassword = `User@123456`; 
+
   const form = useForm({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      lastName: "", 
-      firstName: "", 
-      phone: "", email: "", dob: "", cccd: "", gender: "Nam", hometown: "",
+      lastName: "", firstName: "", phone: "", email: "", dob: "", cccd: "", gender: "Nam", hometown: "",
     },
   });
+
+  // --- FILL DATA KHI EDIT ---
+  useEffect(() => {
+    if (isOpen) {
+        if (tenantToEdit) {
+            let fName = tenantToEdit.first_name || "";
+            let lName = tenantToEdit.last_name || "";
+            if (!fName && !lName && tenantToEdit.full_name) {
+                const parts = tenantToEdit.full_name.trim().split(" ");
+                fName = parts.pop();
+                lName = parts.join(" ");
+            }
+
+            form.reset({
+                firstName: fName,
+                lastName: lName,
+                phone: tenantToEdit.phone || "",
+                email: tenantToEdit.email || "",
+                dob: tenantToEdit.date_of_birth ? String(tenantToEdit.date_of_birth).split("T")[0] : "",
+                cccd: tenantToEdit.cccd || "",
+                gender: tenantToEdit.gender || "Nam",
+                hometown: tenantToEdit.address || "", 
+            });
+        } else {
+            form.reset({
+                lastName: "", firstName: "", phone: "", email: "", dob: "", cccd: "", gender: "Nam", hometown: "",
+            });
+        }
+        setActiveTab("info");
+        setFrontImage(null);
+        setBackImage(null);
+    }
+  }, [isOpen, tenantToEdit, form]);
 
   const handleImageChange = (e, type) => {
     const file = e.target.files[0];
@@ -69,59 +104,50 @@ export default function AddTenantModal({ isOpen, onClose, onAddSuccess }) {
   const onSubmit = async (values) => {
     setIsSubmitting(true);
     try {
-    //   const phoneSuffix = values.phone.slice(-4);
-      const defaultPassword = `12345678`;
-      const apiPayload = {
+      // Payload chung
+      const commonPayload = {
         first_name: values.firstName, 
         last_name: values.lastName,   
         email: values.email,
         phone: values.phone,
         cccd: values.cccd,
         date_of_birth: values.dob || null,
-        
-        status: "ACTIVE",
-        is_temporary_residence: false,
-        temporary_residence_date: null,
-        
-        password: defaultPassword,
-        confirm_password: defaultPassword,
+        gender: values.gender,
+        address: values.hometown,
+        status: "ACTIVE", 
       };
 
-      console.log("Creating account:", apiPayload);
-
-      const res = await authService.createTenant(apiPayload);
-
-      if (res) {
+      if (isEditMode) {
+        // --- UPDATE ---
+        await userService.update(tenantToEdit.id, commonPayload);
+        toast.success("Cập nhật thông tin thành công!");
+      } else {
+        // --- CREATE ---
+        const createPayload = {
+            ...commonPayload,
+            password: defaultPassword,
+            is_temporary_residence: false,
+            role_name: "TENANT"
+        };
+        await userService.createTenant(createPayload);
         toast.success("Tạo tài khoản thành công!", {
-            description: `Tên đăng nhập: ${values.email} \nMật khẩu: ${defaultPassword}`,
-            duration: 10000, 
+            description: `Mật khẩu mặc định: ${defaultPassword}`,
+            duration: 8000, 
         });
-        
-        setGeneratedPass(defaultPassword);
-
-        const fullNameCombined = `${values.lastName} ${values.firstName}`;
-        if (onAddSuccess) onAddSuccess({ ...values, fullName: fullNameCombined, id: res.id || Date.now() });
-        
-        setTimeout(() => {
-            onClose();
-            form.reset();
-            setFrontImage(null);
-            setBackImage(null);
-            setActiveTab("info");
-            setGeneratedPass("");
-        }, 2000);
       }
+
+      if (onAddSuccess) onAddSuccess(); 
+      onClose();
+
     } catch (error) {
       console.error("Lỗi:", error);
-      if (error.response?.data?.detail) {
-          const detail = error.response.data.detail;
-          if (Array.isArray(detail)) {
-             toast.error(`Lỗi: ${detail[0].msg} (${detail[0].loc.join(".")})`);
-          } else {
-             toast.error(detail);
-          }
+      const detail = error.response?.data?.detail;
+      if (typeof detail === 'string') {
+          toast.error(detail);
+      } else if (Array.isArray(detail)) {
+          toast.error(`Lỗi: ${detail[0].msg}`);
       } else {
-          toast.error("Tạo tài khoản thất bại.");
+          toast.error("Thao tác thất bại. Có thể Email/CCCD đã tồn tại.");
       }
     } finally {
       setIsSubmitting(false);
@@ -134,9 +160,13 @@ export default function AddTenantModal({ isOpen, onClose, onAddSuccess }) {
         
         <div className="p-6 pb-2">
             <DialogHeader>
-            <DialogTitle className="text-2xl font-bold">Thêm khách thuê</DialogTitle>
+            <DialogTitle className="text-2xl font-bold">
+                {isEditMode ? "Cập nhật thông tin" : "Thêm khách thuê"}
+            </DialogTitle>
             <DialogDescription>
-                Hệ thống sẽ tự động tạo tài khoản đăng nhập cho khách với thông tin dưới đây.
+                {isEditMode 
+                    ? "Cập nhật thông tin cá nhân của khách thuê." 
+                    : "Hệ thống sẽ tự động tạo tài khoản đăng nhập cho khách."}
             </DialogDescription>
             </DialogHeader>
         </div>
@@ -156,17 +186,15 @@ export default function AddTenantModal({ isOpen, onClose, onAddSuccess }) {
                 
                 {activeTab === "info" && (
                     <div className="grid grid-cols-2 gap-4">
-                        
-                        {/* --- SỬA: Tách Họ và Tên thành 2 input --- */}
                         <FormField control={form.control} name="lastName" render={({ field }) => (
-                            <FormItem className="col-span-1"><FormLabel className="text-xs font-semibold">Họ</FormLabel><FormControl><Input placeholder="Last name" {...field} className="h-9" /></FormControl><FormMessage /></FormItem>
+                            <FormItem className="col-span-1"><FormLabel className="text-xs font-semibold">Họ & Đệm</FormLabel><FormControl><Input placeholder="Nguyễn Văn" {...field} className="h-9" /></FormControl><FormMessage /></FormItem>
                         )}/>
                         <FormField control={form.control} name="firstName" render={({ field }) => (
-                            <FormItem className="col-span-1"><FormLabel className="text-xs font-semibold">Tên</FormLabel><FormControl><Input placeholder="First name" {...field} className="h-9" /></FormControl><FormMessage /></FormItem>
+                            <FormItem className="col-span-1"><FormLabel className="text-xs font-semibold">Tên</FormLabel><FormControl><Input placeholder="A" {...field} className="h-9" /></FormControl><FormMessage /></FormItem>
                         )}/>
 
                         <FormField control={form.control} name="email" render={({ field }) => (
-                            <FormItem className="col-span-1"><FormLabel className="text-xs font-semibold">Email </FormLabel><FormControl><Input placeholder="email@example.com" {...field} className="h-9" /></FormControl><FormMessage /></FormItem>
+                            <FormItem className="col-span-1"><FormLabel className="text-xs font-semibold">Email</FormLabel><FormControl><Input disabled={isEditMode} placeholder="email@example.com" {...field} className="h-9" /></FormControl><FormMessage /></FormItem>
                         )}/>
                          <FormField control={form.control} name="phone" render={({ field }) => (
                             <FormItem className="col-span-1"><FormLabel className="text-xs font-semibold">Số điện thoại</FormLabel><FormControl><Input {...field} className="h-9" /></FormControl><FormMessage /></FormItem>
@@ -178,9 +206,21 @@ export default function AddTenantModal({ isOpen, onClose, onAddSuccess }) {
                         <FormField control={form.control} name="dob" render={({ field }) => (
                             <FormItem className="col-span-1"><FormLabel className="text-xs font-semibold">Ngày sinh</FormLabel><FormControl><Input type="date" {...field} className="h-9 block w-full" /></FormControl></FormItem>
                         )}/>
-                       
+                        
                         <FormField control={form.control} name="gender" render={({ field }) => (
-                            <FormItem className="col-span-1"><FormLabel className="text-xs font-semibold">Giới tính</FormLabel><FormControl><select {...field} className="flex h-9 w-full rounded-md border px-3 text-sm"><option value="Nam">Nam</option><option value="Nữ">Nữ</option></select></FormControl></FormItem>
+                            <FormItem className="col-span-1">
+                                <FormLabel className="text-xs font-semibold">Giới tính</FormLabel>
+                                <Select onValueChange={field.onChange} value={field.value} defaultValue={field.value}>
+                                    <FormControl>
+                                        <SelectTrigger className="h-9"><SelectValue placeholder="Chọn" /></SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                        <SelectItem value="Nam">Nam</SelectItem>
+                                        <SelectItem value="Nữ">Nữ</SelectItem>
+                                        <SelectItem value="Khác">Khác</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </FormItem>
                         )}/>
                         <FormField control={form.control} name="hometown" render={({ field }) => (
                             <FormItem className="col-span-1"><FormLabel className="text-xs font-semibold">Quê quán</FormLabel><FormControl><Input {...field} className="h-9" /></FormControl></FormItem>
@@ -188,7 +228,6 @@ export default function AddTenantModal({ isOpen, onClose, onAddSuccess }) {
                     </div>
                 )}
 
-                {/* TAB ẢNH (Giữ nguyên) */}
                 {activeTab === "images" && (
                     <div className="space-y-4">
                         <div className="grid grid-cols-2 gap-4">
@@ -220,13 +259,13 @@ export default function AddTenantModal({ isOpen, onClose, onAddSuccess }) {
 
                 <div className="flex justify-between items-center mt-6 pt-4 border-t">
                     <div className="text-xs text-gray-500 italic">
-                        *Tài khoản sẽ được tạo với mật khẩu mặc định.
+                        {!isEditMode && <span>*Mật khẩu mặc định: <span className="font-mono font-bold text-gray-700">{defaultPassword}</span></span>}
                     </div>
                     <div className="flex gap-2">
                         <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting} className="h-9">Huỷ</Button>
                         <Button type="submit" disabled={isSubmitting} className="bg-black text-white hover:bg-gray-800 h-9 min-w-[120px]">
                             {isSubmitting ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : null}
-                            {isSubmitting ? "Đang tạo..." : "Tạo tài khoản"}
+                            {isSubmitting ? "Đang xử lý..." : (isEditMode ? "Lưu thay đổi" : "Tạo tài khoản")}
                         </Button>
                     </div>
                 </div>
