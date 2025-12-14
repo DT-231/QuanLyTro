@@ -19,8 +19,4 @@ export const authService = {
     return await api.post("/auth/login", { email, password });
   },
 
-  createTenant: async (userData) => {
-    const response = await api.post("/auth/create-tenant", userData);
-    return response.data;
-  },
 };

@@ -13,6 +13,7 @@ import { FiFilter, FiChevronLeft, FiChevronRight } from "react-icons/fi";
 // 1. Import Sonner
 import { Toaster, toast } from "sonner";
 import DeleteConfirmationModal from "@/components/modals/DeleteConfirmationModal";
+import Pagination from "@/components/Pagination";
 
 const IssueManagement = () => {
   // 1. Mock Data (Dựa trên hình ảnh)
@@ -375,47 +376,13 @@ const IssueManagement = () => {
           </table>
         </div>
 
-        {/* --- FOOTER & PAGINATION --- */}
-        <div className="p-4 bg-white flex flex-col sm:flex-row justify-between items-center gap-4 border-t border-gray-100">
-          <span className="text-xs text-gray-500 font-medium">
-            Hiển thị {currentData.length} trên tổng số {filteredIssues.length}{" "}
-            sự cố
-          </span>
-
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-              className="px-3 py-1.5 rounded-md text-sm font-medium transition-colors 
-                text-gray-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-            >
-              <FiChevronLeft /> Previous
-            </button>
-
-            {[...Array(totalPages)].map((_, idx) => (
-              <button
-                key={idx}
-                onClick={() => setCurrentPage(idx + 1)}
-                className={`px-3 py-1 rounded text-sm transition-all ${
-                  currentPage === idx + 1
-                    ? "bg-gray-100 text-black font-medium"
-                    : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"
-                }`}
-              >
-                {idx + 1}
-              </button>
-            ))}
-
-            <button
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages || totalPages === 0}
-              className="px-3 py-1.5 rounded-md text-sm font-medium transition-colors text-gray-600 hover:bg-gray-100 
-                 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-            >
-              Next <FiChevronRight />
-            </button>
-          </div>
-        </div>
+        <Pagination 
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={totalItems}
+            onPageChange={setCurrentPage}
+            label="sự cố"
+         />
       </div>
 
       <DeleteConfirmationModal

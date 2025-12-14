@@ -6,7 +6,7 @@ import {
   FaPlus,
   FaBuilding,
 } from "react-icons/fa";
-import { FiFilter, FiChevronLeft, FiChevronRight } from "react-icons/fi";
+import { FiFilter } from "react-icons/fi";
 
 // 1. Import Sonner
 import { Toaster, toast } from "sonner";
@@ -17,6 +17,7 @@ import EditBuildingModal from "@/components/modals/building/EditBuildingModal";
 import BuildingDetailModal from "@/components/modals/building/BuildingDetailModal";
 import { buildingService } from "@/services/buildingService";
 import DeleteConfirmationModal from "@/components/modals/DeleteConfirmationModal";
+import Pagination from "@/components/Pagination"; // Import Pagination dùng chung
 
 const BuildingManagement = () => {
   const [buildings, setBuildings] = useState([]);
@@ -45,41 +46,47 @@ const BuildingManagement = () => {
   // --- API HANDLERS ---
 
   // 1. Fetch List
-const fetchBuildings = async (priorityId = null) => {
-  try {
-    setLoading(true);
-    const response = await buildingService.getAll();
-    
-    let listData = [];
-    if (response?.data?.data && Array.isArray(response.data.data.items)) {
-       listData = response.data.data.items;
-    } else if (response?.data?.items && Array.isArray(response.data.items)) {
-       listData = response.data.items;
-    } else if (response?.items && Array.isArray(response.items)) {
-       listData = response.items;
-    }
-    listData.sort((a, b) => {
-      const dateA = new Date(a.created_at || 0).getTime();
-      const dateB = new Date(b.created_at || 0).getTime();
-      return dateB - dateA; 
-    })
-    if (priorityId) {
-      const index = listData.findIndex(item => item.id === priorityId);
-      if (index > -1) {
-        const [item] = listData.splice(index, 1); 
-        listData.unshift(item); 
-      }
-    }
+  const fetchBuildings = async (priorityId = null) => {
+    try {
+      setLoading(true);
+      const response = await buildingService.getAll();
 
-    setBuildings(listData);
-  } catch (error) {
-    console.error("Lỗi tải dữ liệu:", error);
-    toast.error("Không thể tải danh sách tòa nhà");
-    setBuildings([]);
-  } finally {
-    setLoading(false);
-  }
-};
+      let listData = [];
+      // Xử lý response linh hoạt
+      if (response?.data?.data && Array.isArray(response.data.data.items)) {
+        listData = response.data.data.items;
+      } else if (response?.data?.items && Array.isArray(response.data.items)) {
+        listData = response.data.items;
+      } else if (response?.items && Array.isArray(response.items)) {
+        listData = response.items;
+      } else if (Array.isArray(response)) { // Trường hợp trả về mảng trực tiếp
+        listData = response;
+      }
+
+      listData.sort((a, b) => {
+        const dateA = new Date(a.created_at || 0).getTime();
+        const dateB = new Date(b.created_at || 0).getTime();
+        return dateB - dateA;
+      });
+
+      if (priorityId) {
+        const index = listData.findIndex((item) => item.id === priorityId);
+        if (index > -1) {
+          const [item] = listData.splice(index, 1);
+          listData.unshift(item);
+        }
+      }
+
+      setBuildings(listData);
+    } catch (error) {
+      console.error("Lỗi tải dữ liệu:", error);
+      toast.error("Không thể tải danh sách tòa nhà");
+      setBuildings([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchBuildings();
   }, []);
@@ -88,10 +95,7 @@ const fetchBuildings = async (priorityId = null) => {
   const handleAddBuilding = async (newBuildingData) => {
     try {
       const response = await buildingService.create(newBuildingData);
-      if (
-        response &&
-        (response.code === 200 || response.code === 201 || response.message)
-      ) {
+      if (response && (response.code === 200 || response.code === 201 || response.message)) {
         toast.success("Thêm toà nhà thành công!");
         await fetchBuildings();
         setIsAddModalOpen(false);
@@ -100,18 +104,16 @@ const fetchBuildings = async (priorityId = null) => {
       }
     } catch (error) {
       console.error("Lỗi thêm mới:", error);
-      const msg =
-        error.response?.data?.detail?.[0]?.msg ||
-        error.response?.data?.message ||
-        "Lỗi khi thêm tòa nhà!";
+      const msg = error.response?.data?.detail?.[0]?.msg || error.response?.data?.message || "Lỗi khi thêm tòa nhà!";
       toast.error(msg);
     }
   };
 
+  // --- SỬA LỖI: Thêm hàm handleEditClick ---
   const handleEditClick = (building) => {
     if (!building) return;
-    setSelectedBuilding(building);
-    setIsEditModalOpen(true);
+    setSelectedBuilding(building); // Set data để EditModal nhận
+    setIsEditModalOpen(true);      // Mở Modal
   };
 
   // 3. Update Building
@@ -120,7 +122,7 @@ const fetchBuildings = async (priorityId = null) => {
       const response = await buildingService.update(id, updatedData);
       if (response && (response.code === 200 || response.data)) {
         toast.success("Cập nhật thành công!");
-       await fetchBuildings(id); 
+        await fetchBuildings(id);
         setIsEditModalOpen(false);
         setCurrentPage(1);
       } else {
@@ -128,12 +130,8 @@ const fetchBuildings = async (priorityId = null) => {
       }
     } catch (error) {
       console.error("Lỗi cập nhật:", error);
-      const msg =
-        error.response?.data?.detail?.[0]?.msg ||
-        error.response?.data?.message ||
-        "Lỗi khi cập nhật!";
+      const msg = error.response?.data?.detail?.[0]?.msg || error.response?.data?.message || "Lỗi khi cập nhật!";
       toast.error(msg);
-      throw error;
     }
   };
 
@@ -170,9 +168,7 @@ const fetchBuildings = async (priorityId = null) => {
       const response = await buildingService.delete(buildingToDelete.id);
       if (response && (response.code === 200 || !response.code)) {
         toast.success(`Đã xóa tòa nhà: ${buildingToDelete.building_name}`);
-        setBuildings((prev) =>
-          prev.filter((item) => item.id !== buildingToDelete.id)
-        );
+        setBuildings((prev) => prev.filter((item) => item.id !== buildingToDelete.id));
       } else {
         toast.error("Xóa thất bại!");
       }
@@ -189,27 +185,19 @@ const fetchBuildings = async (priorityId = null) => {
   // --- HELPER UI ---
   const getStatusLabel = (status) => {
     switch (status) {
-      case "ACTIVE":
-        return "Hoạt động";
-      case "INACTIVE":
-        return "Ngừng hoạt động";
-      case "SUSPENDED":
-        return "Tạm dừng";
-      default:
-        return status;
+      case "ACTIVE": return "Hoạt động";
+      case "INACTIVE": return "Ngừng hoạt động";
+      case "SUSPENDED": return "Tạm dừng";
+      default: return status;
     }
   };
 
   const getStatusColor = (status) => {
     switch (status) {
-      case "ACTIVE":
-        return "text-green-600 bg-green-100";
-      case "SUSPENDED":
-        return "text-yellow-600 bg-yellow-100";
-      case "INACTIVE":
-        return "text-gray-600 bg-gray-300";
-      default:
-        return "text-gray-600 bg-gray-300";
+      case "ACTIVE": return "text-green-600 bg-green-100";
+      case "SUSPENDED": return "text-yellow-600 bg-yellow-100";
+      case "INACTIVE": return "text-gray-600 bg-gray-300";
+      default: return "text-gray-600 bg-gray-300";
     }
   };
 
@@ -244,7 +232,10 @@ const fetchBuildings = async (priorityId = null) => {
     });
   }, [buildings, searchTerm, filterStatus]);
 
+  // Logic phân trang client-side (vì API Building hiện tại trả về toàn bộ danh sách)
   const totalPages = Math.ceil(filteredBuildings.length / itemsPerPage);
+  const totalItems = filteredBuildings.length; // Thêm biến này cho Pagination component
+  
   const currentData = filteredBuildings.slice(
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage
@@ -354,13 +345,13 @@ const fetchBuildings = async (priorityId = null) => {
                       {item.address_line}
                     </td>
                     <td className="p-4 text-center font-medium">
-                      {item.total_rooms}
+                      {item.total_rooms || 0}
                     </td>
                     <td className="p-4 text-center text-red-500 font-bold">
-                      {item.available_rooms}
+                      {item.available_rooms || 0}
                     </td>
                     <td className="p-4 text-center text-green-600 font-bold">
-                      {item.rented_rooms}
+                      {item.rented_rooms || 0}
                     </td>
                     <td className="p-4 text-gray-500 text-sm">
                       <span className="truncate block max-w-[150px]">
@@ -386,9 +377,10 @@ const fetchBuildings = async (priorityId = null) => {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleEditClick(item); // Gọi hàm đã được thêm lại
+                            handleEditClick(item); // SỬA: Gọi đúng hàm
                           }}
                           className="p-2 border border-gray-200 rounded hover:bg-gray-900 hover:text-white text-gray-500 transition-all shadow-sm"
+                          title="Sửa toà nhà"
                         >
                           <FaEdit size={14} />
                         </button>
@@ -398,6 +390,7 @@ const fetchBuildings = async (priorityId = null) => {
                             handleDeleteClick(item);
                           }}
                           className="p-2 border border-red-100 rounded hover:bg-red-500 hover:text-white text-red-500 transition-all shadow-sm bg-red-50"
+                          title="Xóa toà nhà"
                         >
                           <FaTrashAlt size={14} />
                         </button>
@@ -416,42 +409,14 @@ const fetchBuildings = async (priorityId = null) => {
           </table>
         </div>
 
-        {/* PAGINATION */}
-        <div className="p-4 bg-white flex flex-col sm:flex-row justify-between items-center gap-4">
-          <span className="text-xs text-gray-500 font-medium">
-            Hiển thị {currentData.length} trên tổng số{" "}
-            {filteredBuildings.length} tòa nhà
-          </span>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-              className="px-3 py-1.5 rounded-md text-sm font-medium transition-colors text-gray-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-            >
-              <FiChevronLeft /> Prev
-            </button>
-            {[...Array(totalPages)].map((_, idx) => (
-              <button
-                key={idx}
-                onClick={() => setCurrentPage(idx + 1)}
-                className={`px-3 py-1 rounded text-sm ${
-                  currentPage === idx + 1
-                    ? "bg-gray-100 text-black font-medium"
-                    : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"
-                }`}
-              >
-                {idx + 1}
-              </button>
-            ))}
-            <button
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages || totalPages === 0}
-              className="px-3 py-1.5 rounded-md text-sm font-medium transition-colors text-gray-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-            >
-              Next <FiChevronRight />
-            </button>
-          </div>
-        </div>
+        {/* REUSABLE PAGINATION */}
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={totalItems}
+          onPageChange={setCurrentPage}
+          label="tòa nhà"
+        />
       </div>
 
       {/* --- MODALS --- */}
@@ -461,7 +426,6 @@ const fetchBuildings = async (priorityId = null) => {
         onAddSuccess={handleAddBuilding}
       />
 
-      {/* SỬA: Bọc điều kiện render EditModal */}
       {isEditModalOpen && selectedBuilding && (
         <EditBuildingModal
           isOpen={isEditModalOpen}
@@ -480,6 +444,7 @@ const fetchBuildings = async (priorityId = null) => {
         building={detailBuildingData}
         loading={loadingDetail}
       />
+      
       <DeleteConfirmationModal
         isOpen={deleteModalOpen}
         onClose={() => setDeleteModalOpen(false)}
