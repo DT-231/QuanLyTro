@@ -1,17 +1,17 @@
 import React from "react";
 
-const AccountChangePassword = () => {
+const AccountChangePassword = ({ user }) => {
   return (
     <div className="w-full flex justify-center mt-6">
       <div className="w-[450px] bg-white p-8 rounded-xl shadow-lg border">
         <div className="flex flex-col items-center mb-4">
           <img
-            src="/images/avatar-default.png"
+            src={user?.avatar || "/img/avatar-default.png"}
             alt="avatar"
-            className="w-16 h-16 rounded-full border"
+            className="w-16 h-16 rounded-full border object-cover"
           />
-          <p className="mt-2 font-semibold">Lương Công Phúc</p>
-          <p className="text-gray-500 text-sm">0328762098</p>
+          <p className="mt-2 font-semibold">{user?.fullName}</p>
+          <p className="text-gray-500 text-sm">{user?.phone}</p>
         </div>
 
         <label>Mật khẩu cũ</label>
