@@ -1,9 +1,13 @@
 """Script tự động setup sau khi pull code về - Hỗ trợ cả Windows và Unix.
 
 Chạy file này sau khi git pull để:
-1. Kích hoạt môi trường ảo
+1. Tạo môi trường ảo (nếu chưa có)
 2. Cài đặt/cập nhật dependencies
-3. Chạy migration database
+3. Tạo file .env (nếu chưa có)
+4. Chạy migration database
+
+Cách dùng:
+    python setup_after_pull.py
 """
 
 import os
@@ -66,51 +70,63 @@ def run_command(command, description):
         return False
 
 
-def check_virtual_env():
-    """Kiểm tra môi trường ảo có tồn tại không."""
+def create_virtual_env():
+    """Tạo môi trường ảo nếu chưa có."""
     python_path = get_python_executable()
     
-    if not os.path.exists(python_path):
-        print("❌ Không tìm thấy môi trường ảo!")
-        print(f"   Vui lòng tạo môi trường ảo trước:")
-        
-        if platform.system() == "Windows":
-            print("   python -m venv env")
-        else:
-            print("   python3 -m venv env")
-        
-        sys.exit(1)
+    if os.path.exists(python_path):
+        print(f"✅ Môi trường ảo đã tồn tại: {python_path}")
+        return True
     
-    print(f"✅ Đã tìm thấy môi trường ảo: {python_path}")
+    print("📦 Chưa có môi trường ảo, đang tạo mới...")
+    
+    # Tìm Python command phù hợp
+    python_cmd = "python" if platform.system() == "Windows" else "python3"
+    
+    try:
+        result = subprocess.run(
+            [python_cmd, "-m", "venv", "env"],
+            check=True,
+            capture_output=True,
+            text=True
+        )
+        print("✅ Đã tạo môi trường ảo thành công!")
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Lỗi khi tạo môi trường ảo: {e.stderr}")
+        return False
+    except FileNotFoundError:
+        print(f"❌ Không tìm thấy Python! Vui lòng cài Python trước.")
+        return False
 
 
 def install_dependencies():
     """Cài đặt/cập nhật dependencies từ requirements.txt."""
-    pip_path = get_pip_executable()
-    
-    if not os.path.exists("requirements.txt"):
-        print("⚠️  Không tìm thấy requirements.txt, bỏ qua bước cài đặt dependencies")
+def check_env_file():
+    """Kiểm tra và tạo file .env từ .env.example nếu chưa có."""
+    if os.path.exists(".env"):
+        print("✅ File .env đã tồn tại")
         return True
     
-    return run_command(
-        [pip_path, "install", "-r", "requirements.txt"],
-        "Cài đặt/cập nhật dependencies"
-    )
-
-
-def run_migrations():
-    """Chạy Alembic migration để cập nhật database."""
-    python_path = get_python_executable()
-    
-    # Kiểm tra alembic.ini có tồn tại không
-    if not os.path.exists("alembic.ini"):
-        print("⚠️  Không tìm thấy alembic.ini, bỏ qua migration")
+    if os.path.exists(".env.example"):
+        print("📝 Đang tạo file .env từ .env.example...")
+        try:
+            with open(".env.example", "r", encoding="utf-8") as src:
+                content = src.read()
+            with open(".env", "w", encoding="utf-8") as dst:
+                dst.write(content)
+            print("✅ Đã tạo file .env")
+            print("⚠️  Vui lòng kiểm tra và cập nhật thông tin DATABASE_URL, SECRET_KEY trong .env")
+            return True
+        except Exception as e:
+            print(f"❌ Lỗi khi tạo .env: {e}")
+            return False
+    else:
+        print("⚠️  Không tìm thấy .env.example, bỏ qua bước này")
+        print("   Vui lòng tạo file .env thủ công với các biến:")
+        print("   - DATABASE_URL")
+        print("   - SECRET_KEY")
         return True
-    
-    return run_command(
-        [python_path, "-m", "alembic", "upgrade", "head"],
-        "Chạy database migrations"
-    )
 
 
 def main():
@@ -121,7 +137,55 @@ def main():
     print(f"Platform: {platform.system()}")
     print(f"Python: {sys.version}")
     
-    # Bước 1: Kiểm tra môi trường ảo
+    # Bước 1: Tạo môi trường ảo (nếu chưa có)
+    if not create_virtual_env():
+        print("\n❌ Không thể tạo môi trường ảo!")
+        sys.exit(1)
+    
+    # Bước 2: Cài đặt dependencies
+    if not install_dependencies():
+        print("\n❌ Cài đặt dependencies thất bại!")
+        sys.exit(1)
+    
+    # Bước 3: Kiểm tra file .env
+    check_env_file()
+    
+    # Bước 4: Chạy migrations
+    print("\n⚠️  Đảm bảo PostgreSQL đang chạy trước khi tiếp tục!")
+    print("   - macOS: brew services start postgresql@14")
+    print("   - Windows: Mở pgAdmin hoặc start PostgreSQL service")
+    print("   - Docker: docker-compose up -d postgres")
+    
+    input("\nNhấn Enter để tiếp tục migration (hoặc Ctrl+C để hủy)...")
+    
+    if not run_migrations():
+        print("\n❌ Migration thất bại!")
+        print("Vui lòng kiểm tra:")
+        print("  - Database có đang chạy không? (PostgreSQL port 5433)")
+        print("  - Cấu hình DATABASE_URL trong .env có đúng không?")
+        print("  - Database 'rental_management' đã được tạo chưa?")
+        sys.exit(1)
+    
+    # Hoàn thành
+    print("\n" + "="*60)
+    print("✅ SETUP HOÀN TẤT!")
+    print("="*60)
+    print("\n📋 Các bước tiếp theo:")
+    print("\n1. Kiểm tra file .env và cập nhật thông tin nếu cần")
+    print("2. Chạy seed data (tùy chọn):")
+    
+    if platform.system() == "Windows":
+        print("     env\\Scripts\\python.exe scripts/seed_roles_and_admin.py")
+    else:
+        print("     ./env/bin/python scripts/seed_roles_and_admin.py")
+    
+    print("\n3. Khởi động server:")
+    if platform.system() == "Windows":
+        print("     env\\Scripts\\uvicorn.exe main:app --reload")
+    else:
+        print("     ./env/bin/uvicorn main:app --reload")
+    
+    print("\n4. Truy cập API docs tại: http://localhost:8000/docs")
     check_virtual_env()
     
     # Bước 2: Cài đặt dependencies

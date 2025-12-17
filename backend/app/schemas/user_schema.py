@@ -171,8 +171,9 @@ class UserListItem(BaseModel):
     phone: Optional[str] = None
     email: EmailStr
     gender: Optional[str] = None  # "Nam" hoặc "Nữ"
-    district: Optional[str] = None  # Quận/quận
-    status: str  # "Đang thuê", "Chưa thuê", "Đã trả phòng"
+    district: Optional[str] = None  # Quê quán
+    status: str  # "ACTIVE", "INACTIVE"
+    role_name: Optional[str] = None  # Tên role: "TENANT", "CUSTOMER"
     
     model_config = {"from_attributes": True}
 

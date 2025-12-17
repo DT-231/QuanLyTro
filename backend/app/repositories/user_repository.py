@@ -134,6 +134,13 @@ class UserRepository:
         """
         query = self.db.query(User).options(joinedload(User.role))
         
+        # Loại trừ ADMIN - chỉ hiển thị TENANT và CUSTOMER
+        from app.models.role import Role
+        from app.core.Enum.userEnum import UserRole
+        admin_role = self.db.query(Role).filter(Role.role_code == UserRole.ADMIN.value).first()
+        if admin_role:
+            query = query.filter(User.role_id != admin_role.id)
+        
         # Apply filters
         if search:
             search_pattern = f"%{search}%"
@@ -144,11 +151,18 @@ class UserRepository:
                     User.email.ilike(search_pattern),
                     User.phone.ilike(search_pattern),
                     User.cccd.ilike(search_pattern),
+                    User.hometown.ilike(search_pattern),  # Thêm search theo quê quán
                 )
             )
         
         if status:
             query = query.filter(User.status == status)
+        
+        if gender:
+            query = query.filter(User.gender == gender)
+        
+        if district:  # Filter theo hometown
+            query = query.filter(User.hometown.ilike(f"%{district}%"))
         
         if role_id:
             query = query.filter(User.role_id == role_id)
@@ -168,6 +182,7 @@ class UserRepository:
                 "gender": user.gender,  # Lấy từ user object
                 "district": user.hometown,  # Hiển thị quê quán vào field district
                 "status": user.status,
+                "role_name": user.role.display_name if user.role and user.role.display_name else (user.role.role_name if user.role else None),  # Tên role tiếng Việt
             })
         
         return result
@@ -176,19 +191,30 @@ class UserRepository:
         self,
         search: Optional[str] = None,
         status: Optional[str] = None,
+        gender: Optional[str] = None,
+        district: Optional[str] = None,
         role_id: Optional[UUID] = None,
     ) -> int:
         """Đếm tổng số users theo filters.
         
         Args:
-            search: Tìm kiếm theo tên, email, phone, CCCD
+            search: Tìm kiếm theo tên, email, phone, CCCD, quê quán
             status: Lọc theo trạng thái
+            gender: Lọc theo giới tính
+            district: Lọc theo quê quán
             role_id: Lọc theo role
             
         Returns:
             Tổng số users
         """
         query = self.db.query(func.count(User.id))
+        
+        # Loại trừ ADMIN
+        from app.models.role import Role
+        from app.core.Enum.userEnum import UserRole
+        admin_role = self.db.query(Role).filter(Role.role_code == UserRole.ADMIN.value).first()
+        if admin_role:
+            query = query.filter(User.role_id != admin_role.id)
         
         if search:
             search_pattern = f"%{search}%"
@@ -199,11 +225,18 @@ class UserRepository:
                     User.email.ilike(search_pattern),
                     User.phone.ilike(search_pattern),
                     User.cccd.ilike(search_pattern),
+                    User.hometown.ilike(search_pattern),
                 )
             )
         
         if status:
             query = query.filter(User.status == status)
+        
+        if gender:
+            query = query.filter(User.gender == gender)
+        
+        if district:
+            query = query.filter(User.hometown.ilike(f"%{district}%"))
         
         if role_id:
             query = query.filter(User.role_id == role_id)
