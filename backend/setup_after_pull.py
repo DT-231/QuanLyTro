@@ -102,6 +102,33 @@ def create_virtual_env():
 
 def install_dependencies():
     """Cài đặt/cập nhật dependencies từ requirements.txt."""
+    pip_path = get_pip_executable()
+    
+    if not os.path.exists("requirements.txt"):
+        print("⚠️  Không tìm thấy requirements.txt, bỏ qua bước cài đặt dependencies")
+        return True
+    
+    return run_command(
+        [pip_path, "install", "-r", "requirements.txt"],
+        "Cài đặt/cập nhật dependencies"
+    )
+
+
+def run_migrations():
+    """Chạy Alembic migration để cập nhật database."""
+    python_path = get_python_executable()
+    
+    # Kiểm tra alembic.ini có tồn tại không
+    if not os.path.exists("alembic.ini"):
+        print("⚠️  Không tìm thấy alembic.ini, bỏ qua migration")
+        return True
+    
+    return run_command(
+        [python_path, "-m", "alembic", "upgrade", "head"],
+        "Chạy database migrations"
+    )
+
+
 def check_env_file():
     """Kiểm tra và tạo file .env từ .env.example nếu chưa có."""
     if os.path.exists(".env"):
@@ -186,33 +213,6 @@ def main():
         print("     ./env/bin/uvicorn main:app --reload")
     
     print("\n4. Truy cập API docs tại: http://localhost:8000/docs")
-    check_virtual_env()
-    
-    # Bước 2: Cài đặt dependencies
-    if not install_dependencies():
-        print("\n⚠️  Cài đặt dependencies thất bại, nhưng vẫn tiếp tục...")
-    
-    # Bước 3: Chạy migrations
-    if not run_migrations():
-        print("\n❌ Migration thất bại!")
-        print("Vui lòng kiểm tra:")
-        print("  - Database có đang chạy không?")
-        print("  - Cấu hình DATABASE_URL trong .env có đúng không?")
-        sys.exit(1)
-    
-    # Hoàn thành
-    print("\n" + "="*60)
-    print("✅ SETUP HOÀN TẤT!")
-    print("="*60)
-    print("\nBạn có thể chạy server bằng lệnh:")
-    
-    if platform.system() == "Windows":
-        print("  env\\Scripts\\python.exe main.py")
-    else:
-        print("  source env/bin/activate && python main.py")
-    
-    print("\nhoặc:")
-    print("  uvicorn main:app --reload")
 
 
 if __name__ == "__main__":
