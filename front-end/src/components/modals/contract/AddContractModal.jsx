@@ -3,6 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { X, Plus, Loader2, Check, ChevronsUpDown } from "lucide-react";
+import { FaFileContract } from "react-icons/fa";
 import { toast } from "sonner";
 
 // Services
@@ -64,15 +65,26 @@ const formSchema = z.object({
 export default function AddContractModal({ isOpen, onClose, onAddSuccess }) {
   const [rooms, setRooms] = useState([]);
   const [tenants, setTenants] = useState([]);
+  const [selectedTenant, setSelectedTenant] = useState(null);
+  const [tempCCCD, setTempCCCD] = useState(""); // CCCD tạm thời khi tenant chưa có
   const [loadingData, setLoadingData] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // --- STATE SERVICES (Chỉ cần ID và Name) ---
+  // --- STATE SERVICES (Object với name, amount, description) ---
   const [services, setServices] = useState([
-    { id: 1, name: "Phí rác" },
-    { id: 2, name: "Phí giữ xe" },
+    {
+      id: 1,
+      name: "Phí rác",
+      amount: 20000,
+      description: "Phí thu gớm rác hàng tháng",
+    },
+    { id: 2, name: "Phí giữ xe", amount: 50000, description: "Phí giữ xe máy" },
   ]);
-  const [newServiceName, setNewServiceName] = useState("");
+  const [newService, setNewService] = useState({
+    name: "",
+    amount: 0,
+    description: "",
+  });
 
   const form = useForm({
     resolver: zodResolver(formSchema),
@@ -93,17 +105,20 @@ export default function AddContractModal({ isOpen, onClose, onAddSuccess }) {
     },
   });
 
-  const generateNextCode = (contracts) => {
-    if (!contracts || contracts.length === 0) return "HD001";
-    let maxNum = 0;
-    contracts.forEach((contract) => {
-      const code = contract.contract_number;
-      if (code && code.startsWith("HD")) {
-        const numPart = parseInt(code.replace("HD", ""), 10);
-        if (!isNaN(numPart) && numPart > maxNum) maxNum = numPart;
-      }
-    });
-    return `HD${String(maxNum + 1).padStart(3, "0")}`;
+  // Thông tin Bên A (Chủ nhà trọ - set cứng)
+  const landlordInfo = {
+    name: "Nguyễn Văn A",
+    cccd: "001234567890",
+    address: "123 Đường ABC, Quận XYZ, TP.HCM",
+    phone: "0901234567",
+  };
+
+  const generateNextCode = () => {
+    // Tạo mã hợp đồng dựa trên thời gian: INV-XXXXXX (6 số cuối của timestamp)
+    const timestamp = Date.now(); // milliseconds since 1970
+    const last6Digits = String(timestamp).slice(-6);
+    
+    return `INV-${last6Digits}`;
   };
 
   useEffect(() => {
@@ -111,10 +126,9 @@ export default function AddContractModal({ isOpen, onClose, onAddSuccess }) {
       const fetchResources = async () => {
         setLoadingData(true);
         try {
-          const [resRooms, resTenants, resContracts] = await Promise.all([
+          const [resRooms, resTenants] = await Promise.all([
             roomService.getAll({ size: 100, status: "AVAILABLE" }),
             userService.getAll({ size: 100, role_code: "TENANT" }),
-            contractService.getAll({ size: 100 }),
           ]);
 
           if (resRooms?.data?.items) setRooms(resRooms.data.items);
@@ -125,11 +139,8 @@ export default function AddContractModal({ isOpen, onClose, onAddSuccess }) {
           else if (resTenants?.items) setTenants(resTenants.items);
           else setTenants([]);
 
-          let currentContracts = [];
-          if (resContracts?.data?.items) currentContracts = resContracts.data.items;
-          else if (resContracts?.items) currentContracts = resContracts.items;
-
-          const nextCode = generateNextCode(currentContracts);
+          // Tạo mã hợp đồng dựa trên thời gian
+          const nextCode = generateNextCode();
           form.setValue("contractCode", nextCode);
         } catch (error) {
           console.error("Lỗi tải dữ liệu:", error);
@@ -164,14 +175,19 @@ export default function AddContractModal({ isOpen, onClose, onAddSuccess }) {
     // form.setValue("paymentCycle", months.toString());
   };
 
-  // --- LOGIC DỊCH VỤ (Tags) ---
+  // --- LOGIC DỊCH VỤ ---
   const handleAddService = () => {
-    if (!newServiceName.trim()) return;
+    if (!newService.name.trim()) return;
     setServices([
       ...services,
-      { id: Date.now(), name: newServiceName.trim() },
+      {
+        id: Date.now(),
+        name: newService.name.trim(),
+        amount: newService.amount || 0,
+        description: newService.description || "",
+      },
     ]);
-    setNewServiceName("");
+    setNewService({ name: "", amount: 0, description: "" });
   };
 
   const handleRemoveService = (id) => {
@@ -182,18 +198,32 @@ export default function AddContractModal({ isOpen, onClose, onAddSuccess }) {
   const onSubmit = async (values) => {
     setIsSubmitting(true);
     try {
+      // Kiểm tra CCCD
+      const cccdToUse = selectedTenant?.cccd || tempCCCD;
+      if (!cccdToUse || cccdToUse.trim() === "") {
+        toast.error("Vui lòng nhập số CCCD/CMND của người thuê");
+        setIsSubmitting(false);
+        return;
+      }
+
+      if (cccdToUse.length < 9 || cccdToUse.length > 12) {
+        toast.error("Số CCCD/CMND phải từ 9-12 ký tự");
+        setIsSubmitting(false);
+        return;
+      }
 
       const serviceFeesPayload = services
         .filter((s) => s.name.trim() !== "")
         .map((s) => ({
           name: s.name,
-          amount: 0, 
-          description: "" 
+          amount: s.amount || 0,
+          description: s.description || "",
         }));
 
       const apiPayload = {
         room_id: values.roomId,
         tenant_id: values.tenantId,
+        tenant_cccd: cccdToUse, // Gửi CCCD (từ tenant hoặc nhập tạm)
         contract_number: values.contractCode,
         start_date: values.startDate,
         end_date: values.endDate,
@@ -206,7 +236,7 @@ export default function AddContractModal({ isOpen, onClose, onAddSuccess }) {
         number_of_tenants: 1,
         terms_and_conditions: values.terms || "",
         notes: "",
-       service_fees: serviceFeesPayload,
+        service_fees: serviceFeesPayload,
         status: values.status,
       };
       console.log("Submitting Payload:", apiPayload);
@@ -216,9 +246,13 @@ export default function AddContractModal({ isOpen, onClose, onAddSuccess }) {
       if (res && (res.success || res.data || res.id)) {
         const createdContract = res.data || res;
         toast.success(
-          `Tạo thành công hợp đồng ${createdContract?.contract_number || values.contractCode}!`
+          `Tạo thành công hợp đồng ${
+            createdContract?.contract_number || values.contractCode
+          }!`
         );
         if (onAddSuccess) onAddSuccess(createdContract);
+        setSelectedTenant(null);
+        setTempCCCD("");
         onClose();
         form.reset();
       } else {
@@ -227,10 +261,12 @@ export default function AddContractModal({ isOpen, onClose, onAddSuccess }) {
     } catch (error) {
       console.error("Submit Error:", error);
       if (error.response?.data?.data?.errors) {
-         // Xử lý lỗi validation chi tiết như trong log bạn gửi
-         const errorList = error.response.data.data.errors;
-         const errorMsg = errorList.map(e => `${e.field}: ${e.message}`).join("\n");
-         toast.error(`Lỗi dữ liệu:\n${errorMsg}`);
+        // Xử lý lỗi validation chi tiết như trong log bạn gửi
+        const errorList = error.response.data.data.errors;
+        const errorMsg = errorList
+          .map((e) => `${e.field}: ${e.message}`)
+          .join("\n");
+        toast.error(`Lỗi dữ liệu:\n${errorMsg}`);
       } else if (
         error.response?.data?.detail &&
         Array.isArray(error.response.data.detail)
@@ -249,9 +285,15 @@ export default function AddContractModal({ isOpen, onClose, onAddSuccess }) {
     }
   };
 
+  const handleClose = () => {
+    setSelectedTenant(null);
+    setTempCCCD("");
+    onClose();
+  };
+
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[700px] bg-white max-h-[90vh] flex flex-col p-0 gap-0">
+    <Dialog open={isOpen} onOpenChange={handleClose}>
+      <DialogContent className="sm:max-w-[95vw] lg:max-w-[1400px] bg-white max-h-[90vh] flex flex-col p-0 gap-0">
         <div className="p-6 pb-4 border-b">
           <DialogHeader>
             <DialogTitle className="text-2xl font-bold flex items-center gap-2">
@@ -265,326 +307,503 @@ export default function AddContractModal({ isOpen, onClose, onAddSuccess }) {
 
         <div className="p-6 overflow-y-auto flex-1 custom-scrollbar">
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
-              {/* --- HÀNG 1: Mã HĐ - Khách - Phòng --- */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <FormField
-                  control={form.control}
-                  name="contractCode"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="font-semibold text-gray-700">
-                        Mã hợp đồng
-                      </FormLabel>
-                      <FormControl>
-                        <Input {...field} placeholder="HD..." />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              {/* LAYOUT 2 CỘT TRÊN DESKTOP */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* --- CỘT TRÁI --- */}
+                <div className="space-y-6">
+                  {/* --- THÔNG TIN HỢP ĐỒNG CƠ BẢN --- */}
+                  <div className=" p-5 rounded-xl border-2 ">
+                    <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                      <FaFileContract className="text-blue-600" />
+                      Thông tin hợp đồng
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="contractCode"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="font-semibold text-gray-700">
+                              Mã hợp đồng
+                            </FormLabel>
+                            <FormControl>
+                              <Input
+                                {...field}
+                                placeholder="HD..."
+                                className="bg-white"
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
 
-                <FormField
-                  control={form.control}
-                  name="tenantId"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-col">
-                      <FormLabel className="font-semibold text-gray-700">
-                        Khách thuê
-                      </FormLabel>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <FormControl>
-                            <Button
-                              variant="outline"
-                              role="combobox"
-                              className={cn(
-                                "w-full justify-between font-normal",
-                                !field.value && "text-muted-foreground"
-                              )}
-                            >
-                              {field.value
-                                ? tenants.find((t) => t.id === field.value)
-                                    ?.full_name || "Khách hàng"
-                                : "Chọn khách hàng"}
-                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                            </Button>
-                          </FormControl>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-[250px] p-0" align="start">
-                          <Command>
-                            <CommandInput placeholder="Tìm tên hoặc SĐT..." />
-                            <CommandList>
-                              <CommandEmpty>Không tìm thấy.</CommandEmpty>
-                              <CommandGroup>
-                                {tenants.map((t) => (
-                                  <CommandItem
-                                    value={t.full_name + " " + t.phone}
-                                    key={t.id}
-                                    onSelect={() =>
-                                      form.setValue("tenantId", t.id)
-                                    }
+                      <FormField
+                        control={form.control}
+                        name="roomId"
+                        render={({ field }) => (
+                          <FormItem className="flex flex-col">
+                            <FormLabel className="font-semibold text-gray-700">
+                              Phòng (Trống)
+                            </FormLabel>
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <FormControl>
+                                  <Button
+                                    variant="outline"
+                                    role="combobox"
+                                    className={cn(
+                                      "w-full justify-between font-normal bg-white",
+                                      !field.value && "text-muted-foreground"
+                                    )}
                                   >
-                                    <Check
-                                      className={cn(
-                                        "mr-2 h-4 w-4",
-                                        t.id === field.value
-                                          ? "opacity-100"
-                                          : "opacity-0"
-                                      )}
-                                    />
-                                    <div className="flex flex-col">
-                                      <span>{t.full_name}</span>
-                                      <span className="text-xs text-gray-500">
-                                        {t.phone}
-                                      </span>
-                                    </div>
-                                  </CommandItem>
-                                ))}
-                              </CommandGroup>
-                            </CommandList>
-                          </Command>
-                        </PopoverContent>
-                      </Popover>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                                    {field.value
+                                      ? rooms.find((r) => r.id === field.value)
+                                          ?.room_number
+                                        ? `Phòng ${
+                                            rooms.find(
+                                              (r) => r.id === field.value
+                                            ).room_number
+                                          }`
+                                        : "Đã chọn phòng"
+                                      : "Chọn phòng"}
+                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                  </Button>
+                                </FormControl>
+                              </PopoverTrigger>
+                              <PopoverContent
+                                className="w-[220px] p-0"
+                                align="start"
+                              >
+                                <Command shouldFilter={false}>
+                                  <CommandInput placeholder="Tìm số phòng..." />
+                                  <CommandList>
+                                    <CommandEmpty>
+                                      Hết phòng trống.
+                                    </CommandEmpty>
+                                    <CommandGroup className="max-h-[300px] overflow-y-auto">
+                                      {rooms.map((r) => (
+                                        <CommandItem
+                                          value={`${r.room_number} ${
+                                            r.building_name || ""
+                                          }`}
+                                          key={r.id}
+                                          onSelect={() =>
+                                            handleRoomSelect(r.id)
+                                          }
+                                        >
+                                          <Check
+                                            className={cn(
+                                              "mr-2 h-4 w-4",
+                                              r.id === field.value
+                                                ? "opacity-100"
+                                                : "opacity-0"
+                                            )}
+                                          />
+                                          <div className="flex flex-col">
+                                            <span className="font-medium">
+                                              Phòng {r.room_number}
+                                            </span>
+                                            {r.building_name && (
+                                              <span className="text-xs text-gray-500">
+                                                {r.building_name}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </CommandItem>
+                                      ))}
+                                    </CommandGroup>
+                                  </CommandList>
+                                </Command>
+                              </PopoverContent>
+                            </Popover>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  </div>
 
-                <FormField
-                  control={form.control}
-                  name="roomId"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-col">
-                      <FormLabel className="font-semibold text-gray-700">
-                        Phòng (Trống)
-                      </FormLabel>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <FormControl>
-                            <Button
-                              variant="outline"
-                              role="combobox"
-                              className={cn(
-                                "w-full justify-between font-normal",
-                                !field.value && "text-muted-foreground"
-                              )}
-                            >
-                              {field.value
-                                ? rooms.find((r) => r.id === field.value)
-                                    ?.room_number
-                                  ? `Phòng ${
-                                      rooms.find((r) => r.id === field.value)
-                                        .room_number
-                                    }`
-                                  : "Đã chọn phòng"
-                                : "Chọn phòng"}
-                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                            </Button>
-                          </FormControl>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-[220px] p-0" align="start">
-                          <Command>
-                            <CommandInput placeholder="Tìm số phòng..." />
-                            <CommandList>
-                              <CommandEmpty>Hết phòng trống.</CommandEmpty>
-                              <CommandGroup>
-                                {rooms.map((r) => (
-                                  <CommandItem
-                                    value={`${r.room_number} ${
-                                      r.building_name || ""
-                                    }`}
-                                    key={r.id}
-                                    onSelect={() => handleRoomSelect(r.id)}
+                  {/* --- BÊN A: CHỦ NHÀ TRỌ --- */}
+                  <div className=" p-5 rounded-xl border-2 ">
+                    <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                      <div className="w-8 h-8 bg-green-600 text-white rounded-full flex items-center justify-center font-bold">
+                        A
+                      </div>
+                      Bên A - Chủ nhà trọ (Bên cho thuê)
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-sm font-semibold text-gray-700">
+                          Họ và tên
+                        </label>
+                        <div className="px-4 py-2.5 bg-white border-2  rounded-lg text-gray-900 font-medium">
+                          {landlordInfo.name}
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-semibold text-gray-700">
+                          Số CCCD/CMND
+                        </label>
+                        <div className="px-4 py-2.5 bg-white border-2  rounded-lg text-gray-900 font-medium">
+                          {landlordInfo.cccd}
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-semibold text-gray-700">
+                          Số điện thoại
+                        </label>
+                        <div className="px-4 py-2.5 bg-white border-2  rounded-lg text-gray-900 font-medium">
+                          {landlordInfo.phone}
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-semibold text-gray-700">
+                          Địa chỉ
+                        </label>
+                        <div className="px-4 py-2.5 bg-white border-2  rounded-lg text-gray-900 font-medium">
+                          {landlordInfo.address}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* --- BÊN B: NGƯỜI THUÊ --- */}
+                  <div className=" p-5 rounded-xl border-2 ">
+                    <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                      <div className="w-8 h-8 bg-orange-600 text-white rounded-full flex items-center justify-center font-bold">
+                        B
+                      </div>
+                      Bên B - Người thuê (Bên nhận thuê)
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="tenantId"
+                        render={({ field }) => (
+                          <FormItem className="flex flex-col">
+                            <FormLabel className="font-semibold text-gray-700">
+                              Họ và tên *
+                            </FormLabel>
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <FormControl>
+                                  <Button
+                                    variant="outline"
+                                    role="combobox"
+                                    className={cn(
+                                      "w-full justify-between font-normal bg-white",
+                                      !field.value && "text-muted-foreground"
+                                    )}
                                   >
-                                    <Check
-                                      className={cn(
-                                        "mr-2 h-4 w-4",
-                                        r.id === field.value
-                                          ? "opacity-100"
-                                          : "opacity-0"
-                                      )}
-                                    />
-                                    <div className="flex flex-col">
-                                      <span className="font-medium">
-                                        Phòng {r.room_number}
-                                      </span>
-                                      {r.building_name && (
-                                        <span className="text-xs text-gray-500">
-                                          {r.building_name}
-                                        </span>
-                                      )}
-                                    </div>
-                                  </CommandItem>
-                                ))}
-                              </CommandGroup>
-                            </CommandList>
-                          </Command>
-                        </PopoverContent>
-                      </Popover>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
+                                    {field.value
+                                      ? tenants.find(
+                                          (t) => t.id === field.value
+                                        )?.full_name || "Khách hàng"
+                                      : "Chọn khách hàng"}
+                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                  </Button>
+                                </FormControl>
+                              </PopoverTrigger>
+                              <PopoverContent
+                                className="w-[250px] p-0"
+                                align="start"
+                              >
+                                <Command>
+                                  <CommandInput placeholder="Tìm tên hoặc SĐT..." />
+                                  <CommandList className="max-h-[300px] overflow-y-auto">
+                                    <CommandEmpty>Không tìm thấy.</CommandEmpty>
+                                    <CommandGroup>
+                                      {tenants.map((t) => (
+                                        <CommandItem
+                                          value={t.full_name + " " + t.phone}
+                                          key={t.id}
+                                          onSelect={() => {
+                                            form.setValue("tenantId", t.id);
+                                            setSelectedTenant(t);
+                                            setTempCCCD(""); // Reset CCCD tạm khi chọn tenant mới
+                                          }}
+                                        >
+                                          <Check
+                                            className={cn(
+                                              "mr-2 h-4 w-4",
+                                              t.id === field.value
+                                                ? "opacity-100"
+                                                : "opacity-0"
+                                            )}
+                                          />
+                                          <div className="flex flex-col">
+                                            <span>{t.full_name}</span>
+                                            <span className="text-xs text-gray-500">
+                                              {t.phone}
+                                            </span>
+                                          </div>
+                                        </CommandItem>
+                                      ))}
+                                    </CommandGroup>
+                                  </CommandList>
+                                </Command>
+                              </PopoverContent>
+                            </Popover>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
 
-              {/* --- HÀNG 2: Ngày tháng --- */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-lg border border-slate-100">
-                <FormField
-                  control={form.control}
-                  name="startDate"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Ngày bắt đầu</FormLabel>
-                      <FormControl>
-                        <Input type="date" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="endDate"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Ngày kết thúc</FormLabel>
-                      <FormControl>
-                        <Input type="date" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <div className="col-span-1 md:col-span-2 flex items-center gap-3">
-                  <span className="text-sm text-gray-500">Thời hạn:</span>
-                  <div className="flex gap-2">
-                    {[3, 6, 12].map((m) => (
-                      <Button
-                        key={m}
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDurationClick(m)}
-                        className="h-8"
-                      >
-                        {m === 12 ? "1 Năm" : `${m} Tháng`}
-                      </Button>
-                    ))}
+                      <div className="gap-2 flex flex-col">
+                        <FormLabel className="font-semibold text-gray-700">
+                          Số CCCD/CMND *
+                        </FormLabel>
+
+                        {selectedTenant?.cccd ? (
+                          <div className="px-4 py-2.5 bg-white border-2  rounded-lg text-gray-900 font-medium">
+                            {selectedTenant.cccd}
+                          </div>
+                        ) : (
+                          <>
+                            <Input
+                              placeholder="Nhập số CCCD/CMND"
+                              value={tempCCCD}
+                              onChange={(e) => setTempCCCD(e.target.value)}
+                              className="bg-white border-2 "
+                              maxLength={12}
+                              disabled={!selectedTenant}
+                            />
+                          </>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
+                {/* --- KẾT THÚC CỘT TRÁI --- */}
 
-              {/* --- HÀNG 3: Tài chính --- */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <FormField
-                  control={form.control}
-                  name="rentPrice"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Giá thuê (VNĐ)</FormLabel>
-                      <FormControl>
-                        <Input type="number" {...field} />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="deposit"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Tiền cọc (VNĐ)</FormLabel>
-                      <FormControl>
-                        <Input type="number" {...field} />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="electricityPrice"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Điện (/kWh)</FormLabel>
-                      <FormControl>
-                        <Input type="number" {...field} />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="waterPrice"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Nước (/Khối)</FormLabel>
-                      <FormControl>
-                        <Input type="number" {...field} />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-              </div>
+                {/* --- CỘT PHẢI --- */}
+                <div className="space-y-6">
+                  {/* --- THỜI HẠN HỢP ĐỒNG --- */}
+                  <div className=" p-5 rounded-xl border-2 ">
+                    <h3 className="text-lg font-bold text-gray-800 mb-4">
+                      ⏰ Thời hạn hợp đồng
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                      <FormField
+                        control={form.control}
+                        name="startDate"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="font-semibold text-gray-700">
+                              Ngày bắt đầu
+                            </FormLabel>
+                            <FormControl>
+                              <Input
+                                type="date"
+                                {...field}
+                                className="bg-white"
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="endDate"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="font-semibold text-gray-700">
+                              Ngày kết thúc
+                            </FormLabel>
+                            <FormControl>
+                              <Input
+                                type="date"
+                                {...field}
+                                className="bg-white"
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className="text-sm text-gray-500">Thời hạn:</span>
+                      <div className="flex gap-2">
+                        {[3, 6, 12].map((m) => (
+                          <Button
+                            key={m}
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDurationClick(m)}
+                            className="h-8"
+                          >
+                            {m === 12 ? "1 Năm" : `${m} Tháng`}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
 
-              {/* --- HÀNG 4: Cấu hình thanh toán --- */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <FormField
-                  control={form.control}
-                  name="paymentDate"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Ngày đóng tiền</FormLabel>
-                      <FormControl>
-                        <Input type="number" min={1} max={31} {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="paymentCycle"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Chu kỳ thanh toán</FormLabel>
-                      <FormControl>
-                        <select
-                          {...field}
-                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                        >
-                          <option value="1">1 Tháng/lần</option>
-                          <option value="3">3 Tháng/lần</option>
-                          <option value="6">6 Tháng/lần</option>
-                        </select>
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="status"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Trạng thái</FormLabel>
-                      <FormControl>
-                        <select
-                          {...field}
-                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                        >
-                          <option value="ACTIVE">Hoạt động (ACTIVE)</option>
-                          <option value="PENDING">Chờ ký</option>
-                        </select>
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-              </div>
+                  {/* --- THÔNG TIN TÀI CHÍNH --- */}
+                  <div className=" p-5 rounded-xl border-2">
+                    <h3 className="text-lg font-bold text-gray-800 mb-4">
+                      💰 Thông tin tài chính
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="rentPrice"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="font-semibold text-gray-700">
+                              Giá thuê (VNĐ)
+                            </FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                {...field}
+                                className="bg-white"
+                              />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="deposit"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="font-semibold text-gray-700">
+                              Tiền cọc (VNĐ)
+                            </FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                {...field}
+                                className="bg-white"
+                              />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="electricityPrice"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="font-semibold text-gray-700">
+                              Điện (/kWh)
+                            </FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                {...field}
+                                className="bg-white"
+                              />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="waterPrice"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="font-semibold text-gray-700">
+                              Nước (/Người)
+                            </FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                {...field}
+                                className="bg-white"
+                              />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  </div>
 
-              {/* --- DỊCH VỤ (Tags Style) --- */}
+                  {/* --- CẤU HÌNH THANH TOÁN --- */}
+                  <div className="p-5 rounded-xl border-2">
+                    <h3 className="text-lg font-bold text-gray-800 mb-4">
+                      📅 Cấu hình thanh toán
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4  ">
+                      <FormField
+                        control={form.control}
+                        name="paymentDate"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="font-semibold text-gray-700">
+                              Ngày đóng tiền
+                            </FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                min={1}
+                                max={31}
+                                {...field}
+                                className="bg-white"
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="paymentCycle"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="font-semibold text-gray-700">
+                              Chu kỳ thanh toán
+                            </FormLabel>
+                            <FormControl>
+                              <select
+                                {...field}
+                                className="flex h-10 w-full rounded-md border border-input bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                              >
+                                <option value="1">1 Tháng/lần</option>
+                                <option value="3">3 Tháng/lần</option>
+                                <option value="6">6 Tháng/lần</option>
+                              </select>
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="status"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="font-semibold text-gray-700">
+                              Trạng thái
+                            </FormLabel>
+                            <FormControl>
+                              <select
+                                {...field}
+                                className="flex h-10 w-full rounded-md border border-input bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                              >
+                                <option value="ACTIVE">Hoạt động</option>
+                                <option value="PENDING">Chờ ký</option>
+                              </select>
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  </div>
+                </div>
+                {/* --- KẾT THÚC CỘT PHẢI --- */}
+              </div>
+              {/* --- KẾT THÚC LAYOUT 2 CỘT --- */}
+
+              {/* --- DỊCH VỤ (TOÀN BỘ CHIỀU RỘNG) --- */}
               <div className="bg-slate-50 p-4 rounded-lg border border-slate-100">
                 <FormLabel className="mb-3 block text-base font-medium">
-                  Dịch vụ đi kèm
+                  Dịch vụ
                 </FormLabel>
                 <div className="flex flex-wrap gap-2 mb-3">
                   {services.map((s) => (
@@ -592,7 +811,12 @@ export default function AddContractModal({ isOpen, onClose, onAddSuccess }) {
                       key={s.id}
                       className="bg-white border px-3 py-1.5 rounded-full text-sm flex items-center gap-2 shadow-sm text-gray-700"
                     >
-                      {s.name}
+                      <span className="font-medium">{s.name}</span>
+                      {s.amount > 0 && (
+                        <span className="text-xs text-gray-500">
+                          - {s.amount.toLocaleString("vi-VN")} VNĐ
+                        </span>
+                      )}
                       <X
                         size={14}
                         className="cursor-pointer hover:text-red-500 transition-colors"
@@ -606,11 +830,13 @@ export default function AddContractModal({ isOpen, onClose, onAddSuccess }) {
                     </span>
                   )}
                 </div>
-                <div className="flex gap-2 max-w-sm">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <Input
-                    placeholder="Thêm dịch vụ (Wifi, Vệ sinh...)"
-                    value={newServiceName}
-                    onChange={(e) => setNewServiceName(e.target.value)}
+                    placeholder="Tên dịch vụ (Wifi, Internet...)"
+                    value={newService.name}
+                    onChange={(e) =>
+                      setNewService({ ...newService, name: e.target.value })
+                    }
                     className="bg-white"
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
@@ -619,41 +845,74 @@ export default function AddContractModal({ isOpen, onClose, onAddSuccess }) {
                       }
                     }}
                   />
-                  <Button
-                    type="button"
-                    onClick={handleAddService}
-                    size="icon"
-                    className="shrink-0 bg-slate-900 text-white hover:bg-slate-800"
-                  >
-                    <Plus size={16} />
-                  </Button>
+                  <Input
+                    type="number"
+                    placeholder="Số tiền (VNĐ)"
+                    value={newService.amount || ""}
+                    onChange={(e) =>
+                      setNewService({
+                        ...newService,
+                        amount: parseInt(e.target.value) || 0,
+                      })
+                    }
+                    className="bg-white"
+                  />
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Mô tả (không bắt buộc)"
+                      value={newService.description}
+                      onChange={(e) =>
+                        setNewService({
+                          ...newService,
+                          description: e.target.value,
+                        })
+                      }
+                      className="bg-white"
+                    />
+                    <Button
+                      type="button"
+                      onClick={handleAddService}
+                      size="icon"
+                      className="shrink-0 bg-slate-900 text-white hover:bg-slate-800"
+                    >
+                      <Plus size={16} />
+                    </Button>
+                  </div>
                 </div>
               </div>
 
-              {/* --- TERMS --- */}
-              <FormField
-                control={form.control}
-                name="terms"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Điều khoản đặc biệt & Ghi chú</FormLabel>
-                    <FormControl>
-                      <textarea
-                        {...field}
-                        className="w-full border rounded-md p-3 text-sm min-h-[80px] focus:outline-none focus:ring-2 focus:ring-black/20"
-                        placeholder="Nhập điều khoản bổ sung..."
-                      />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
+              {/* --- ĐIỀU KHOẢN --- */}
+              <div className="bg-gradient-to-r from-gray-50 to-slate-50 p-5 rounded-xl border-2 border-gray-200">
+                <FormField
+                  control={form.control}
+                  name="terms"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-lg font-bold text-gray-800 mb-2 block">
+                        📋 Điều khoản đặc biệt & Ghi chú
+                      </FormLabel>
+                      <FormControl>
+                        <textarea
+                          {...field}
+                          className="w-full border-2 rounded-lg p-3 text-sm min-h-[100px] focus:outline-none focus:ring-2 focus:ring-gray-400 bg-white"
+                          placeholder="Nhập điều khoản bổ sung..."
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+              </div>
             </form>
           </Form>
         </div>
 
         {/* --- FOOTER ACTIONS --- */}
         <div className="p-4 border-t bg-gray-50 flex justify-end gap-3">
-          <Button variant="outline" onClick={onClose} disabled={isSubmitting}>
+          <Button
+            variant="outline"
+            onClick={handleClose}
+            disabled={isSubmitting}
+          >
             Đóng
           </Button>
           <Button

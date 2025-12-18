@@ -45,8 +45,8 @@ const roomSchema = z.object({
   capacity: z.coerce.number().min(1, "Sức chứa tối thiểu 1"),
   base_price: z.coerce.number().min(0),
   deposit_amount: z.coerce.number().min(0),
-  electricity_cost: z.coerce.number().min(0),
-  water_cost: z.coerce.number().min(0),
+  electricity_price: z.coerce.number().min(0),
+  water_price_per_person: z.coerce.number().min(0),
   description: z.string().optional(),
 });
 
@@ -84,8 +84,8 @@ export default function EditRoomModal({
       capacity: 1,
       base_price: 0,
       deposit_amount: 0,
-      electricity_cost: 0,
-      water_cost: 0,
+      electricity_price: 0,
+      water_price_per_person: 0,
       description: "",
     },
   });
@@ -116,8 +116,8 @@ export default function EditRoomModal({
               capacity: data.capacity,
               base_price: data.base_price,
               deposit_amount: data.deposit_amount,
-              electricity_cost: data.electricity_cost,
-              water_cost: data.water_cost,
+              electricity_price: data.electricity_price,
+              water_price_per_person: data.water_price_per_person,
               description: data.description,
             });
 
@@ -443,7 +443,7 @@ export default function EditRoomModal({
                     />
                     <FormField
                       control={form.control}
-                      name="electricity_cost"
+                      name="electricity_price"
                       render={({ field }) => (
                         <FormItem className="space-y-1">
                           <FormLabel className="text-xs font-semibold text-gray-700">
@@ -463,7 +463,7 @@ export default function EditRoomModal({
                     />
                     <FormField
                       control={form.control}
-                      name="water_cost"
+                      name="water_price_per_person"
                       render={({ field }) => (
                         <FormItem className="space-y-1">
                           <FormLabel className="text-xs font-semibold text-gray-700">
