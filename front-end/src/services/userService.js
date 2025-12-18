@@ -30,12 +30,4 @@ export const userService = {
     const response = await api.delete(`/users/${id}`);
     return response.data;
   },
-
-  uploadCCCD: async (userId, file, type) => {
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("type", type);
-    const response = await api.put(`/users/${userId}/upload-cccd`, formData);
-    return response.data;
-  },
 };

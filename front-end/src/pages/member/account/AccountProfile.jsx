@@ -1,15 +1,17 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { User, Upload } from "lucide-react";
+import { authService } from "@/services/authService";
+import { userService } from "@/services/userService";
 
-const AccountProfile = () => {
+const AccountProfile = ({ currentUser, userId }) => {
   const [profile, setProfile] = useState({
-    fullName: "Lương Công Phúc",
-    phone: "0328582153",
-    email: "Luongcongphuct1@gmail.com",
-    cccd: "02555552554444",
-    relativeName: "Đinh Song Quỳnh Như",
-    relativePhone: "0555475596",
-    avatar: "/images/avatar-default.png", // URL ảnh hiện tại
+    fullName: "",
+    phone: "",
+    email: "",
+    cccd: "",
+    relativeName: "",
+    relativePhone: "",
+    avatar: "",
   });
 
   const [previews, setPreviews] = useState({
@@ -17,7 +19,31 @@ const AccountProfile = () => {
     cccd: null,
     residence: null,
   });
+
   const fileInputRef = useRef(null);
+  const cccdRef = useRef(null);
+  const residenceRef = useRef(null);
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const data = await authService.getCurrentUser();
+        setProfile({
+          fullName: `${data.first_name || ""} ${data.last_name || ""}`,
+          phone: data.phone || "",
+          email: data.email || "",
+          cccd: data.cccd || "",
+          relativeName: data.relativeName || "",
+          relativePhone: data.relativePhone || "",
+          avatar: data.avatar || "/images/avatar-default.png",
+        });
+      } catch (err) {
+        console.error("Lỗi khi tải thông tin người dùng:", err);
+      }
+    };
+
+    fetchProfile();
+  }, []);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -35,24 +61,56 @@ const AccountProfile = () => {
     }
   };
 
-  const handleSaveChanges = () => {
-    // TODO: Thêm logic gọi API để lưu dữ liệu và tải lên ảnh
-    console.log("Đang lưu dữ liệu:", {
-      ...profile,
-      previews,
-    });
-    alert("Đã lưu thay đổi! (Kiểm tra console log)");
+  const handleSaveChanges = async () => {
+    let canUpdate = false;
+
+    if (currentUser?.role === "ADMIN") {
+      canUpdate = true;
+    } else if (currentUser?.role === "CUSTOMER" && currentUser?.id === userId) {
+      canUpdate = true;
+    }
+
+    if (!canUpdate) {
+      alert("Bạn không có quyền cập nhật thông tin người dùng này.");
+      return;
+    }
+
+    const formData = new FormData();
+    const [firstName, ...lastNameParts] = profile.fullName.split(" ");
+    formData.append("first_name", firstName);
+    formData.append("last_name", lastNameParts.join(" "));
+    formData.append("email", profile.email);
+    formData.append("phone", profile.phone);
+    formData.append("cccd", profile.cccd);
+    formData.append("relativeName", profile.relativeName);
+    formData.append("relativePhone", profile.relativePhone);
+
+    if (fileInputRef.current?.files[0]) {
+      formData.append("avatar", fileInputRef.current.files[0]);
+    }
+    if (cccdRef.current?.files[0]) {
+      formData.append("cccd_image", cccdRef.current.files[0]);
+    }
+    if (residenceRef.current?.files[0]) {
+      formData.append("residence_image", residenceRef.current.files[0]);
+    }
+
+    try {
+      const updated = await userService.update(userId, formData);
+      alert("Cập nhật thành công!");
+      console.log("Thông tin mới:", updated);
+    } catch (err) {
+      alert(`Cập nhật thất bại: ${err.message}`);
+    }
   };
 
   return (
-    // Sử dụng các lớp CSS nhất quán với thiết kế chung
     <div className="w-full bg-white p-6 md:p-8 rounded-xl shadow-lg">
       <h2 className="text-2xl font-bold mb-8 border-b pb-4">
         Thông tin cá nhân
       </h2>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-12">
-        {/* LEFT SIDE */}
         <div>
           <div className="flex items-center gap-6 mb-6">
             <div className="w-28 h-28 rounded-full border-2 border-gray-200 flex items-center justify-center bg-gray-100 overflow-hidden">
@@ -84,18 +142,28 @@ const AccountProfile = () => {
           <div className="space-y-5">
             <div>
               <label className="font-semibold">Họ và tên:</label>
-              <p className="text-gray-800">{profile.fullName}</p>
+              <input
+                name="fullName"
+                className="w-full mt-1 p-2 border rounded-md"
+                value={profile.fullName || ""}
+                onChange={handleInputChange}
+              />
             </div>
             <div>
               <label className="font-semibold">Số điện thoại:</label>
-              <p className="text-gray-800">{profile.phone}</p>
+              <input
+                name="phone"
+                className="w-full mt-1 p-2 border rounded-md"
+                value={profile.phone || ""}
+                onChange={handleInputChange}
+              />
             </div>
             <div>
               <label className="font-semibold">Email:</label>
               <input
                 name="email"
                 className="w-full mt-1 p-2 border rounded-md"
-                value={profile.email}
+                value={profile.email || ""}
                 onChange={handleInputChange}
               />
             </div>
@@ -104,7 +172,7 @@ const AccountProfile = () => {
               <input
                 name="cccd"
                 className="w-full mt-1 p-2 border rounded-md"
-                value={profile.cccd}
+                value={profile.cccd || ""}
                 onChange={handleInputChange}
               />
             </div>
@@ -114,14 +182,14 @@ const AccountProfile = () => {
                 <input
                   name="relativeName"
                   className="w-1/2 p-2 border rounded-md"
-                  value={profile.relativeName}
+                  value={profile.relativeName || ""}
                   onChange={handleInputChange}
                   placeholder="Họ tên người thân"
                 />
                 <input
                   name="relativePhone"
                   className="w-1/2 p-2 border rounded-md"
-                  value={profile.relativePhone}
+                  value={profile.relativePhone || ""}
                   onChange={handleInputChange}
                   placeholder="SĐT người thân"
                 />
@@ -139,7 +207,6 @@ const AccountProfile = () => {
           </div>
         </div>
 
-        {/* RIGHT SIDE — DOCUMENT IMAGES */}
         <div>
           <h3 className="text-xl font-semibold mb-4">Tài liệu và hình ảnh</h3>
 
@@ -148,11 +215,13 @@ const AccountProfile = () => {
               title="Ảnh CCCD/CMND"
               preview={previews.cccd}
               onImageChange={(e) => handleImageChange(e, "cccd")}
+              inputRef={cccdRef}
             />
             <ImageUploader
               title="Ảnh đăng ký tạm trú"
               preview={previews.residence}
               onImageChange={(e) => handleImageChange(e, "residence")}
+              inputRef={residenceRef}
             />
           </div>
         </div>
@@ -161,8 +230,7 @@ const AccountProfile = () => {
   );
 };
 
-const ImageUploader = ({ title, preview, onImageChange }) => {
-  const inputRef = useRef(null);
+const ImageUploader = ({ title, preview, onImageChange, inputRef }) => {
   return (
     <div className="border p-4 rounded-lg">
       <p className="font-semibold mb-3">{title}</p>
@@ -193,5 +261,4 @@ const ImageUploader = ({ title, preview, onImageChange }) => {
     </div>
   );
 };
-
 export default AccountProfile;
