@@ -93,6 +93,11 @@ class UserUpdate(BaseModel):
 
     All fields are optional; the service layer should apply `exclude_unset`
     when applying updates to the ORM model.
+    
+    Bao gồm cả upload ảnh qua base64:
+    - avatar: Ảnh đại diện
+    - cccd_front: Ảnh CCCD mặt trước
+    - cccd_back: Ảnh CCCD mặt sau
     """
 
     first_name: Optional[str] = Field(None, min_length=2, max_length=50)
@@ -105,6 +110,11 @@ class UserUpdate(BaseModel):
     status: Optional[str] = None
     is_temporary_residence: Optional[bool] = None
     temporary_residence_date: Optional[date] = None
+    
+    # Upload ảnh qua base64
+    avatar: Optional[str] = Field(None, description="Ảnh đại diện (base64 string)")
+    cccd_front: Optional[str] = Field(None, description="Ảnh CCCD mặt trước (base64 string)")
+    cccd_back: Optional[str] = Field(None, description="Ảnh CCCD mặt sau (base64 string)")
 
     model_config = {"from_attributes": True}
 
@@ -114,6 +124,7 @@ class UserOut(BaseModel):
     """Schema returned by the API for User resources.
 
     This excludes the password field and role_id, but includes role object.
+    Bao gồm cả documents (avatar, CCCD) của user.
     """
 
     id: uuid.UUID
@@ -129,6 +140,7 @@ class UserOut(BaseModel):
     is_temporary_residence: Optional[bool] = False
     temporary_residence_date: Optional[date] = None
     role_name: Optional[str] = None  # Role name thay vì role object
+    documents: Optional[list[dict]] = []  # Danh sách tài liệu (avatar, CCCD)
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -186,3 +198,14 @@ class UserStats(BaseModel):
     not_rented: int = 0  # Chưa thuê
     
     model_config = {"from_attributes": True}
+
+
+class UserDocumentUpload(BaseModel):
+    """Schema upload tài liệu qua base64.
+    
+    Frontend gửi ảnh dạng base64 string.
+    """
+    avatar: Optional[str] = Field(None, description="Ảnh đại diện (base64)")
+    cccd_front: Optional[str] = Field(None, description="Ảnh CCCD mặt trước (base64)")
+    cccd_back: Optional[str] = Field(None, description="Ảnh CCCD mặt sau (base64)")
+

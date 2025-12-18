@@ -31,6 +31,7 @@ class ContractBase(BaseModel):
     
     room_id: UUID = Field(..., description="ID của phòng thuê")
     tenant_id: UUID = Field(..., description="ID của khách hàng thuê")
+    tenant_cccd: Optional[str] = Field(None, min_length=9, max_length=12, description="Số CCCD/CMND của người thuê")
     start_date: date = Field(..., description="Ngày bắt đầu hợp đồng")
     end_date: date = Field(..., description="Ngày kết thúc hợp đồng")
     rental_price: Decimal = Field(..., gt=0, description="Giá thuê (VNĐ/Tháng)")
@@ -125,6 +126,7 @@ class ContractOut(BaseModel):
     # Thông tin phòng và khách hàng
     room_id: UUID
     tenant_id: UUID
+    tenant_cccd: Optional[str] = None  # Số CCCD/CMND của người thuê
     
     # Thông tin thời gian
     start_date: date

@@ -170,7 +170,7 @@ def get_user_detail(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Lấy thông tin chi tiết người dùng.
+    """Lấy thông tin chi tiết người dùng bao gồm cả documents.
     
     **Yêu cầu**: Admin hoặc chính user đó
     
@@ -182,7 +182,26 @@ def get_user_detail(
         - Thông tin cá nhân đầy đủ
         - Role
         - Trạng thái
+        - Documents (avatar, CCCD_FRONT, CCCD_BACK) với base64 URL
         - Ngày tạo, cập nhật
+        
+    **Documents format**:
+    ```json
+    "documents": [
+        {
+            "id": "uuid",
+            "type": "AVATAR",
+            "url": "data:image/png;base64,...",
+            "created_at": "2024-01-01T00:00:00"
+        },
+        {
+            "id": "uuid",
+            "type": "CCCD_FRONT",
+            "url": "data:image/jpeg;base64,...",
+            "created_at": "2024-01-01T00:00:00"
+        }
+    ]
+    ```
     """
     try:
         service = UserService(db)
@@ -201,7 +220,7 @@ def update_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Cập nhật thông tin người dùng.
+    """Cập nhật thông tin người dùng (bao gồm upload ảnh).
     
     **Yêu cầu**: Admin hoặc chính user đó
     
@@ -211,19 +230,69 @@ def update_user(
     - CCCD phải unique nếu được update
     - Status phải hợp lệ (ACTIVE, INACTIVE)
     
+    **Upload ảnh qua base64**:
+    - avatar: Ảnh đại diện (format: data:image/png;base64,...)
+    - cccd_front: Ảnh CCCD mặt trước
+    - cccd_back: Ảnh CCCD mặt sau
+    
     Args:
         user_id: UUID của người dùng cần update
-        user_data: Dữ liệu cập nhật (các field optional)
+        user_data: Dữ liệu cập nhật (các field optional, bao gồm ảnh base64)
         
     Returns:
         Thông tin người dùng đã được cập nhật
+        
+    **Example request body**:
+    ```json
+    {
+      "first_name": "Nguyễn",
+      "last_name": "Văn A",
+      "phone": "0901234567",
+      "avatar": "data:image/png;base64,iVBORw0KG...",
+      "cccd_front": "data:image/jpeg;base64,/9j/4AAQ..."
+    }
+    ```
     """
     try:
         service = UserService(db)
-        result = service.update_user(user_id, user_data)
+        
+        # Kiểm tra quyền: Admin hoặc chính user đó
+        from app.core.Enum.userEnum import UserRole
+        is_admin = current_user.role and current_user.role.role_code == UserRole.ADMIN.value
+        if not is_admin and current_user.id != user_id:
+            raise ForbiddenException(message="Bạn không có quyền cập nhật thông tin user này")
+        
+        # Tách các trường ảnh ra khỏi user_data
+        avatar_base64 = user_data.avatar
+        cccd_front_base64 = user_data.cccd_front
+        cccd_back_base64 = user_data.cccd_back
+        
+        # Xóa các trường ảnh khỏi user_data để không lưu vào DB
+        user_data_dict = user_data.model_dump(exclude_unset=True)
+        user_data_dict.pop('avatar', None)
+        user_data_dict.pop('cccd_front', None)
+        user_data_dict.pop('cccd_back', None)
+        
+        # Update thông tin user (không bao gồm ảnh)
+        from app.schemas.user_schema import UserUpdate as UserUpdateSchema
+        cleaned_user_data = UserUpdateSchema(**user_data_dict)
+        result = service.update_user(user_id, cleaned_user_data)
+        
+        # Upload ảnh nếu có
+        if avatar_base64 or cccd_front_base64 or cccd_back_base64:
+            service.upload_user_documents_base64(
+                user_id=user_id,
+                avatar_base64=avatar_base64,
+                cccd_front_base64=cccd_front_base64,
+                cccd_back_base64=cccd_back_base64,
+                uploaded_by=current_user.id
+            )
+        
         return response.success(data=result, message="Cập nhật người dùng thành công")
     except ValueError as e:
         raise BadRequestException(message=str(e))
+    except ForbiddenException:
+        raise
     except Exception as e:
         raise InternalServerException(message=f"Lỗi hệ thống: {str(e)}")
 

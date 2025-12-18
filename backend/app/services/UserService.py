@@ -8,10 +8,15 @@ from __future__ import annotations
 from typing import Optional
 from uuid import UUID
 from sqlalchemy.orm import Session
+from fastapi import UploadFile
+import base64
+import os
+import re
 
 from app.repositories.user_repository import UserRepository
 from app.schemas.user_schema import UserUpdate, UserOut, UserListItem, UserStats
 from app.core.Enum.userEnum import UserStatus
+from app.models.user_document import UserDocument
 
 
 class UserService:
@@ -29,13 +34,13 @@ class UserService:
         self.user_repo = UserRepository(db)
 
     def get_user(self, user_id: UUID) -> UserOut:
-        """Lấy thông tin chi tiết user.
+        """Lấy thông tin chi tiết user bao gồm cả documents (avatar, CCCD).
 
         Args:
             user_id: UUID của user cần lấy.
 
         Returns:
-            UserOut schema.
+            UserOut schema với documents array.
 
         Raises:
             ValueError: Nếu không tìm thấy user.
@@ -43,6 +48,24 @@ class UserService:
         user = self.user_repo.get_by_id(user_id)
         if not user:
             raise ValueError(f"Không tìm thấy người dùng với ID: {user_id}")
+
+        # Lấy documents của user
+        documents = (
+            self.db.query(UserDocument)
+            .filter(UserDocument.user_id == user_id)
+            .all()
+        )
+
+        # Convert documents sang list of dict
+        documents_list = [
+            {
+                "id": str(doc.id),
+                "type": doc.document_type,
+                "url": doc.url,
+                "created_at": doc.created_at.isoformat() if doc.created_at else None,
+            }
+            for doc in documents
+        ]
 
         # Convert ORM sang schema
         user_dict = {
@@ -53,10 +76,13 @@ class UserService:
             "phone": user.phone,
             "cccd": user.cccd,
             "date_of_birth": user.date_of_birth,
+            "gender": user.gender,
+            "hometown": user.hometown,
             "status": user.status,
             "is_temporary_residence": user.is_temporary_residence,
             "temporary_residence_date": user.temporary_residence_date,
             "role_name": user.role.role_name if user.role else None,
+            "documents": documents_list,
             "created_at": user.created_at,
             "updated_at": user.updated_at,
         }
@@ -250,6 +276,333 @@ class UserService:
         # if user.tenant_contracts:
         #     active_contracts = [c for c in user.tenant_contracts if c.status == "ACTIVE"]
         #     if active_contracts:
-        #         raise ValueError("Không thể xóa người dùng đang có hợp đồng hoạt động")
+        #         raise ValueError("Không thể xóa user đang có hợp đồng active")
 
         self.user_repo.delete(user)
+
+    async def upload_user_documents(
+        self,
+        user_id: UUID,
+        avatar: Optional[UploadFile] = None,
+        cccd_front: Optional[UploadFile] = None,
+        cccd_back: Optional[UploadFile] = None,
+        uploaded_by: UUID = None,
+    ) -> dict:
+        """Upload tài liệu cá nhân cho user (avatar, CCCD).
+
+        Args:
+            user_id: UUID của user.
+            avatar: File ảnh đại diện.
+            cccd_front: File ảnh CCCD mặt trước.
+            cccd_back: File ảnh CCCD mặt sau.
+            uploaded_by: UUID của user upload.
+
+        Returns:
+            Dict chứa URLs của các tài liệu đã upload.
+
+        Raises:
+            ValueError: Nếu không tìm thấy user hoặc file không hợp lệ.
+        """
+        user = self.user_repo.get_by_id(user_id)
+        if not user:
+            raise ValueError(f"Không tìm thấy người dùng với ID: {user_id}")
+
+        ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png"}
+        MAX_SIZE = 5 * 1024 * 1024  # 5MB
+
+        uploaded_docs = {}
+
+        # Upload avatar
+        if avatar:
+            await self._validate_and_upload_document(
+                file=avatar,
+                user_id=user_id,
+                document_type="AVATAR",
+                uploaded_by=uploaded_by,
+                allowed_extensions=ALLOWED_EXTENSIONS,
+                max_size=MAX_SIZE,
+                result_dict=uploaded_docs,
+            )
+
+        # Upload CCCD mặt trước
+        if cccd_front:
+            await self._validate_and_upload_document(
+                file=cccd_front,
+                user_id=user_id,
+                document_type="CCCD_FRONT",
+                uploaded_by=uploaded_by,
+                allowed_extensions=ALLOWED_EXTENSIONS,
+                max_size=MAX_SIZE,
+                result_dict=uploaded_docs,
+            )
+
+        # Upload CCCD mặt sau
+        if cccd_back:
+            await self._validate_and_upload_document(
+                file=cccd_back,
+                user_id=user_id,
+                document_type="CCCD_BACK",
+                uploaded_by=uploaded_by,
+                allowed_extensions=ALLOWED_EXTENSIONS,
+                max_size=MAX_SIZE,
+                result_dict=uploaded_docs,
+            )
+
+        if not uploaded_docs:
+            raise ValueError("Không có file nào được upload")
+
+        return uploaded_docs
+
+    async def _validate_and_upload_document(
+        self,
+        file: UploadFile,
+        user_id: UUID,
+        document_type: str,
+        uploaded_by: UUID,
+        allowed_extensions: set,
+        max_size: int,
+        result_dict: dict,
+    ) -> None:
+        """Validate và upload một document.
+
+        Args:
+            file: File upload.
+            user_id: UUID của user.
+            document_type: Loại document (AVATAR, CCCD_FRONT, CCCD_BACK).
+            uploaded_by: UUID của user upload.
+            allowed_extensions: Set các extension được phép.
+            max_size: Kích thước file tối đa (bytes).
+            result_dict: Dict để lưu kết quả.
+
+        Raises:
+            ValueError: Nếu file không hợp lệ.
+        """
+        # Validate extension
+        file_ext = file.filename.split(".")[-1].lower()
+        if file_ext not in allowed_extensions:
+            raise ValueError(
+                f"File {file.filename}: Chỉ chấp nhận {', '.join(allowed_extensions).upper()}"
+            )
+
+        # Đọc file content
+        content = await file.read()
+
+        # Validate size
+        if len(content) > max_size:
+            raise ValueError(
+                f"File {file.filename}: Kích thước vượt quá {max_size // (1024*1024)}MB"
+            )
+
+        # Convert to base64
+        base64_data = base64.b64encode(content).decode("utf-8")
+        data_url = f"data:image/{file_ext};base64,{base64_data}"
+
+        # Xóa document cũ cùng loại (nếu có)
+        old_doc = (
+            self.db.query(UserDocument)
+            .filter(
+                UserDocument.user_id == user_id,
+                UserDocument.document_type == document_type,
+            )
+            .first()
+        )
+        if old_doc:
+            self.db.delete(old_doc)
+
+        # Tạo document mới
+        new_doc = UserDocument(
+            user_id=user_id,
+            document_type=document_type,
+            url=data_url,
+            uploaded_by=uploaded_by or user_id,
+        )
+        self.db.add(new_doc)
+        self.db.commit()
+        self.db.refresh(new_doc)
+
+        result_dict[document_type.lower()] = {
+            "id": new_doc.id,
+            "type": document_type,
+            "url": data_url,
+            "filename": file.filename,
+        }
+
+    def get_user_documents(self, user_id: UUID) -> list[dict]:
+        """Lấy danh sách tài liệu của user.
+
+        Args:
+            user_id: UUID của user.
+
+        Returns:
+            List dict chứa thông tin documents.
+
+        Raises:
+            ValueError: Nếu không tìm thấy user.
+        """
+        user = self.user_repo.get_by_id(user_id)
+        if not user:
+            raise ValueError(f"Không tìm thấy người dùng với ID: {user_id}")
+
+        documents = (
+            self.db.query(UserDocument)
+            .filter(UserDocument.user_id == user_id)
+            .all()
+        )
+
+        return [
+            {
+                "id": doc.id,
+                "type": doc.document_type,
+                "url": doc.url,
+                "created_at": doc.created_at,
+            }
+            for doc in documents
+        ]
+
+    def upload_user_documents_base64(
+        self,
+        user_id: UUID,
+        avatar_base64: Optional[str] = None,
+        cccd_front_base64: Optional[str] = None,
+        cccd_back_base64: Optional[str] = None,
+        uploaded_by: UUID = None,
+    ) -> dict:
+        """Upload tài liệu cá nhân qua base64 string.
+
+        Args:
+            user_id: UUID của user.
+            avatar_base64: Base64 string của ảnh đại diện.
+            cccd_front_base64: Base64 string của ảnh CCCD mặt trước.
+            cccd_back_base64: Base64 string của ảnh CCCD mặt sau.
+            uploaded_by: UUID của user upload.
+
+        Returns:
+            Dict chứa thông tin các tài liệu đã upload.
+
+        Raises:
+            ValueError: Nếu không tìm thấy user hoặc base64 không hợp lệ.
+        """
+        user = self.user_repo.get_by_id(user_id)
+        if not user:
+            raise ValueError(f"Không tìm thấy người dùng với ID: {user_id}")
+
+        uploaded_docs = {}
+
+        # Upload avatar
+        if avatar_base64:
+            self._save_base64_document(
+                base64_data=avatar_base64,
+                user_id=user_id,
+                document_type="AVATAR",
+                uploaded_by=uploaded_by,
+                result_dict=uploaded_docs,
+            )
+
+        # Upload CCCD mặt trước
+        if cccd_front_base64:
+            self._save_base64_document(
+                base64_data=cccd_front_base64,
+                user_id=user_id,
+                document_type="CCCD_FRONT",
+                uploaded_by=uploaded_by,
+                result_dict=uploaded_docs,
+            )
+
+        # Upload CCCD mặt sau
+        if cccd_back_base64:
+            self._save_base64_document(
+                base64_data=cccd_back_base64,
+                user_id=user_id,
+                document_type="CCCD_BACK",
+                uploaded_by=uploaded_by,
+                result_dict=uploaded_docs,
+            )
+
+        if not uploaded_docs:
+            raise ValueError("Không có tài liệu nào được upload")
+
+        return uploaded_docs
+
+    def _save_base64_document(
+        self,
+        base64_data: str,
+        user_id: UUID,
+        document_type: str,
+        uploaded_by: UUID,
+        result_dict: dict,
+    ) -> None:
+        """Lưu document từ base64 string.
+
+        Args:
+            base64_data: Base64 string (có thể có data URI prefix).
+            user_id: UUID của user.
+            document_type: Loại document (AVATAR, CCCD_FRONT, CCCD_BACK).
+            uploaded_by: UUID của user upload.
+            result_dict: Dict để lưu kết quả.
+
+        Raises:
+            ValueError: Nếu base64 không hợp lệ.
+        """
+        # Validate base64 string
+        if not base64_data or not isinstance(base64_data, str):
+            raise ValueError(f"{document_type}: Base64 string không hợp lệ")
+
+        # Chuẩn hóa base64: nếu có data URI prefix thì giữ nguyên, không thì thêm vào
+        if base64_data.startswith("data:image/"):
+            # Đã có data URI prefix
+            data_url = base64_data
+            
+            # Validate format: data:image/{type};base64,{data}
+            match = re.match(r'^data:image/(png|jpg|jpeg);base64,(.+)$', data_url)
+            if not match:
+                raise ValueError(f"{document_type}: Format base64 không hợp lệ. Cần: data:image/(png|jpg|jpeg);base64,...")
+            
+            image_type = match.group(1)
+            base64_content = match.group(2)
+        else:
+            # Chưa có prefix, thêm vào (mặc định PNG)
+            data_url = f"data:image/png;base64,{base64_data}"
+            base64_content = base64_data
+            image_type = "png"
+
+        # Validate base64 content
+        try:
+            decoded = base64.b64decode(base64_content)
+            
+            # Validate size (max 5MB)
+            MAX_SIZE = 5 * 1024 * 1024
+            if len(decoded) > MAX_SIZE:
+                raise ValueError(f"{document_type}: Kích thước ảnh vượt quá 5MB")
+                
+        except Exception as e:
+            raise ValueError(f"{document_type}: Base64 decode lỗi - {str(e)}")
+
+        # Xóa document cũ cùng loại (nếu có)
+        old_doc = (
+            self.db.query(UserDocument)
+            .filter(
+                UserDocument.user_id == user_id,
+                UserDocument.document_type == document_type,
+            )
+            .first()
+        )
+        if old_doc:
+            self.db.delete(old_doc)
+
+        # Tạo document mới
+        new_doc = UserDocument(
+            user_id=user_id,
+            document_type=document_type,
+            url=data_url,
+            uploaded_by=uploaded_by or user_id,
+        )
+        self.db.add(new_doc)
+        self.db.commit()
+        self.db.refresh(new_doc)
+
+        result_dict[document_type.lower()] = {
+            "id": new_doc.id,
+            "type": document_type,
+            "url": data_url,
+            "size": len(decoded),
+        }
