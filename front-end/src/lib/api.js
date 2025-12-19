@@ -9,16 +9,15 @@ const api = axios.create({
 
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token');
-    
+    const token = localStorage.getItem("token");
+
     if (token) {
       try {
         const parsedToken = JSON.parse(token);
-        if (typeof parsedToken === 'object' && parsedToken.access_token) {
-           config.headers.Authorization = `Bearer ${parsedToken.access_token}`;
-        } 
-        else if (typeof parsedToken === 'string') {
-           config.headers.Authorization = `Bearer ${parsedToken}`;
+        if (typeof parsedToken === "object" && parsedToken.access_token) {
+          config.headers.Authorization = `Bearer ${parsedToken.access_token}`;
+        } else if (typeof parsedToken === "string") {
+          config.headers.Authorization = `Bearer ${parsedToken}`;
         }
       } catch (e) {
         config.headers.Authorization = `Bearer ${token}`;
@@ -32,4 +31,3 @@ api.interceptors.request.use(
 );
 
 export default api;
-
