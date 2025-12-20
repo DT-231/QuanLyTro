@@ -11,6 +11,22 @@ export const userService = {
     return response.data || response;
   },
 
+  getUserById: async (id) => {
+    const response = await api.get(`/users/${id}`);
+    return response.data;
+  },
+
+  uploadCCCD: async (id, file, type) => {
+    const formData = new FormData();
+    const fieldName = type === "front" ? "cccd_front" : "cccd_back";
+    const response = await api.put(`/users/${id}`, formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+    return response.data;
+  },
+
   getRoles: async () => {
     const response = await api.get("/users/roles");
     return response && response.data ? response.data : response;

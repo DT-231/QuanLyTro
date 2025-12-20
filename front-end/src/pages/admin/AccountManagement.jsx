@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { FaSearch, FaEdit, FaTrashAlt, FaPlus } from "react-icons/fa";
 import { FiFilter } from "react-icons/fi";
 import { Toaster, toast } from "sonner";
@@ -13,7 +13,7 @@ import Pagination from "@/components/Pagination";
 
 const AccountManagement = () => {
   // --- STATES ---
-  const [tenants, setTenants] = useState([]);
+  const [tenants, setTenants] = useState([]); 
   const [stats, setStats] = useState({
     total_tenants: 0,
     active_tenants: 0,
@@ -28,9 +28,7 @@ const AccountManagement = () => {
   const [filterGender, setFilterGender] = useState("");
 
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalItems, setTotalItems] = useState(0);
-  const itemsPerPage = 5; // Bạn có thể tăng lên 10 hoặc 20 tùy ý
+  const itemsPerPage = 5;
 
   // --- MODALS ---
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -39,24 +37,16 @@ const AccountManagement = () => {
   const [tenantToDelete, setTenantToDelete] = useState(null);
 
   // --- API CALLS ---
-  
+
   // 1. Lấy thống kê
   const fetchStats = async () => {
     try {
-      // BƯỚC 1: Gọi API lấy danh sách Roles trước
       const rolesData = await userService.getRoles();
-      
-      // Kiểm tra dữ liệu trả về để đảm bảo nó là một mảng
       const rolesList = Array.isArray(rolesData) ? rolesData : (rolesData.data || []);
-      // BƯỚC 2: Tìm Role có code là "TENANT"
       const tenantRole = rolesList.find(role => role.role_code === "TENANT");
 
       if (tenantRole) {
-
-        const params = {
-          role_id: tenantRole.id 
-        };
-
+        const params = { role_id: tenantRole.id };
         const res = await userService.getStats(params);
         const statsData = res && res.data ? res.data : res;
 
@@ -68,49 +58,37 @@ const AccountManagement = () => {
             not_rented: statsData.not_rented || 0,
           });
         }
-      } else {
-        console.warn("Không tìm thấy Role TENANT trong hệ thống");
       }
-
     } catch (error) {
       console.error("Lỗi khi tải thống kê:", error);
     }
   };
-  // 2. Lấy danh sách khách thuê
+
+  // 2. Lấy danh sách khách thuê (Lấy tất cả và xử lý tại Client)
   const fetchTenants = useCallback(async () => {
     setLoading(true);
     try {
       const params = {
-        page: currentPage,
-        size: itemsPerPage,
         search: searchTerm || null,
-        status:
-          filterStatus === "Đang thuê"
-            ? "ACTIVE"
-            : filterStatus === "Chưa thuê"
-            ? "INACTIVE"
-            : null,
+        status: filterStatus === "Đang thuê" ? "ACTIVE" 
+              : filterStatus === "Chưa thuê" ? "INACTIVE" 
+              : null,
         gender: filterGender || null,
         role_code: "TENANT",
       };
 
       const res = await userService.getAll(params);
-      
-      // Xử lý response với cấu trúc pagination mới
       const dataSource = res && res.data ? res.data : res;
 
-      if (dataSource && dataSource.items) {
-        setTenants(dataSource.items);
-        
-        // Sử dụng pagination object mới
-        const pagination = dataSource.pagination || {};
-        setTotalItems(pagination.totalItems || 0);
-        setTotalPages(pagination.totalPages || 1);
-      } else {
-        setTenants([]);
-        setTotalItems(0);
-        setTotalPages(1);
+      let items = [];
+      if (dataSource && Array.isArray(dataSource.items)) {
+        items = dataSource.items;
+      } else if (Array.isArray(dataSource)) {
+        items = dataSource;
       }
+      const sortedItems = items.sort((a, b) => b.id - a.id);
+      
+      setTenants(sortedItems);
 
     } catch (error) {
       console.error("Lỗi lấy danh sách:", error);
@@ -119,19 +97,32 @@ const AccountManagement = () => {
     } finally {
       setLoading(false);
     }
-  }, [currentPage, searchTerm, filterStatus, filterGender]);
+  }, [searchTerm, filterStatus, filterGender]); 
+
   // Init data
   useEffect(() => {
     fetchStats();
-  }, []);
-
-  // Debounce search: Gọi API khi search/filter thay đổi
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      fetchTenants();
-    }, 500);
-    return () => clearTimeout(timer);
+    fetchTenants();
   }, [fetchTenants]);
+
+  // --- CLIENT SIDE PAGINATION LOGIC ---
+
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  
+
+  const currentTenants = useMemo(() => {
+      return tenants.slice(indexOfFirstItem, indexOfLastItem);
+  }, [tenants, currentPage]);
+
+  const totalPages = Math.ceil(tenants.length / itemsPerPage);
+
+  // --- HELPER: FULL NAME ---
+
+  const renderFullName = (tenant) => {
+    if (tenant.full_name) return tenant.full_name;
+    return [tenant.last_name, tenant.first_name].filter(Boolean).join(" ");
+  };
 
   // --- HANDLERS ---
   const handleOpenAdd = () => {
@@ -147,7 +138,8 @@ const AccountManagement = () => {
   const handleSuccess = () => {
     fetchTenants();
     fetchStats();
-    if (!tenantToEdit) setCurrentPage(1); 
+    // Khi thêm mới hoặc update xong, reset về trang 1 để thấy kết quả ngay
+    setCurrentPage(1); 
   };
 
   const handleDeleteClick = (tenant) => {
@@ -159,9 +151,7 @@ const AccountManagement = () => {
     if (tenantToDelete) {
       try {
         await userService.delete(tenantToDelete.id);
-        toast.success(
-          `Đã xóa: ${tenantToDelete.full_name || tenantToDelete.first_name}`
-        );
+        toast.success(`Đã xóa thành công khách thuê`);
         fetchTenants();
         fetchStats();
       } catch (error) {
@@ -174,19 +164,14 @@ const AccountManagement = () => {
     }
   };
 
-  // Helpers: Xử lý hiển thị màu sắc và text trạng thái
   const getStatusColor = (status) => {
-    // API trả về ACTIVE/INACTIVE
     switch (status) {
       case "ACTIVE":
-      case "Đang thuê": // Fallback nếu dữ liệu cũ
-        return "bg-green-500 text-white";
+      case "Đang thuê": return "bg-green-500 text-white";
       case "INACTIVE":
-      case "Chưa thuê": // Fallback
-      case "Đã trả phòng":
-        return "bg-red-500 text-white";
-      default:
-        return "bg-gray-200 text-gray-800";
+      case "Chưa thuê":
+      case "Đã trả phòng": return "bg-red-500 text-white";
+      default: return "bg-gray-200 text-gray-800";
     }
   };
 
@@ -196,7 +181,7 @@ const AccountManagement = () => {
     return status || "Chưa xác định";
   };
 
-  // --- RENDER (GIỮ NGUYÊN CSS & HTML) ---
+  // --- RENDER ---
   return (
     <div className="min-h-screen bg-gray-50 font-sans relative">
       <Toaster position="top-right" richColors />
@@ -212,7 +197,7 @@ const AccountManagement = () => {
         </button>
       </div>
 
-      {/* FILTER */}
+      {/* FILTER SECTIONS (Giữ nguyên như cũ) */}
       <div className="bg-white p-3 rounded-lg shadow-sm mb-4">
         <div className="flex flex-col md:flex-row justify-between items-center gap-3">
           <div className="relative w-full md:w-1/2 flex items-center">
@@ -230,6 +215,7 @@ const AccountManagement = () => {
             </div>
           </div>
           <div className="flex gap-2 w-full md:w-auto justify-end">
+             {/* Select Filters giữ nguyên */}
             <div className="relative">
               <select
                 className="w-full appearance-none border border-gray-200 px-3 py-1 pr-8 rounded-md bg-white hover:bg-gray-50 text-sm focus:outline-none cursor-pointer text-gray-700"
@@ -264,7 +250,7 @@ const AccountManagement = () => {
         </div>
       </div>
 
-      {/* Stats */}
+      {/* Stats - Giữ nguyên */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
         {[
           { title: "Tổng người thuê", value: stats.total_tenants },
@@ -272,10 +258,7 @@ const AccountManagement = () => {
           { title: "Đã trả phòng", value: stats.returned_rooms },
           { title: "Chưa thuê", value: stats.not_rented || 0 },
         ].map((stat, index) => (
-          <div
-            key={index}
-            className="bg-white p-4 rounded-lg shadow-sm border border-gray-100"
-          >
+          <div key={index} className="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
             <h3 className="text-sm font-medium mb-1">{stat.title}</h3>
             <p className="text-2xl font-bold text-gray-800">{stat.value}</p>
           </div>
@@ -309,15 +292,16 @@ const AccountManagement = () => {
                     Đang tải dữ liệu...
                   </td>
                 </tr>
-              ) : tenants.length > 0 ? (
-                tenants.map((tenant) => (
+              ) : currentTenants.length > 0 ? (
+                // LƯU Ý: Ở đây dùng currentTenants thay vì tenants
+                currentTenants.map((tenant) => (
                   <tr
                     key={tenant.id}
                     className="hover:bg-gray-50 transition-colors"
                   >
                     <td className="p-3 font-semibold text-gray-900">
-                      {tenant.full_name ||
-                        `${tenant.last_name || ""} ${tenant.first_name || ""}`}
+                      {/* GỌI HÀM HELPER HIỂN THỊ TÊN */}
+                      {renderFullName(tenant)}
                       <div className="text-xs text-gray-400 font-normal">
                         {tenant.code ? `#${tenant.code}` : "---"}
                       </div>
@@ -364,11 +348,12 @@ const AccountManagement = () => {
           </table>
         </div>
 
+        {/* Pagination Component */}
         <Pagination
           currentPage={currentPage}
-          totalPages={totalPages}
+          totalPages={totalPages} 
           onPageChange={setCurrentPage}
-          totalItems={totalItems}
+          totalItems={tenants.length} 
           itemName="khách thuê"
         />
       </div>
@@ -384,7 +369,7 @@ const AccountManagement = () => {
         isOpen={deleteModalOpen}
         onClose={() => setDeleteModalOpen(false)}
         onConfirm={confirmDelete}
-        itemName={tenantToDelete?.full_name || tenantToDelete?.name}
+        itemName={renderFullName(tenantToDelete || {})}
         itemType="Khách thuê"
       />
     </div>
