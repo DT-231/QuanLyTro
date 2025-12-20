@@ -31,11 +31,7 @@ api.interceptors.request.use(
     if (token) {
       try {
         const parsedToken = JSON.parse(token);
-        if (typeof parsedToken === "object" && parsedToken.access_token) {
-          config.headers.Authorization = `Bearer ${parsedToken.access_token}`;
-        } else if (typeof parsedToken === "string") {
-          config.headers.Authorization = `Bearer ${parsedToken}`;
-        }
+        config.headers.Authorization = `Bearer ${parsedToken.access_token}`;
       } catch (e) {
         config.headers.Authorization = `Bearer ${token}`;
       }
