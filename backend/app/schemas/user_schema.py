@@ -75,10 +75,16 @@ class UserCreate(UserBase):
 
     Dùng khi Admin tạo tài khoản cho người thuê/khách hàng.
     Không cần confirm_password vì Admin tạo trực tiếp.
+    Hỗ trợ upload ảnh CCCD qua base64 khi tạo.
     """
 
     password: str = Field(..., min_length=8, max_length=16)
     role_id: uuid.UUID = Field(None)
+    
+    # Upload ảnh CCCD qua base64 (optional khi tạo)
+    avatar: Optional[str] = Field(None, description="Ảnh đại diện (base64 string)")
+    cccd_front: Optional[str] = Field(None, description="Ảnh CCCD mặt trước (base64 string)")
+    cccd_back: Optional[str] = Field(None, description="Ảnh CCCD mặt sau (base64 string)")
 
     @model_validator(mode="after")
     def check_contact(self):

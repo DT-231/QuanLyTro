@@ -139,12 +139,30 @@ class AuthService:
 
         # Create new user with TENANT role
         hashed = get_password_hash(tenant_data.password)
-        data = tenant_data.model_dump()
+        data = tenant_data.model_dump(exclude={'avatar', 'cccd_front', 'cccd_back'})
         data["password"] = hashed
         data["role_id"] = tenant_role.id  # Force TENANT role
 
         try:
             user_obj = self.user_repo.create_user(user_in=data)
+            
+            # Upload CCCD images if provided
+            from app.services.UserService import UserService
+            user_service = UserService(self.db)
+            
+            if tenant_data.avatar or tenant_data.cccd_front or tenant_data.cccd_back:
+                try:
+                    user_service.upload_user_documents_base64(
+                        user_id=user_obj.id,
+                        avatar_base64=tenant_data.avatar,
+                        cccd_front_base64=tenant_data.cccd_front,
+                        cccd_back_base64=tenant_data.cccd_back,
+                        uploaded_by=created_by or user_obj.id,
+                    )
+                except Exception as e:
+                    # Log error but don't fail user creation
+                    print(f"Warning: Failed to upload documents: {str(e)}")
+            
             return True, "Đã tạo tài khoản người thuê mới thành công", user_obj
         except IntegrityError as e:
             self.db.rollback()
