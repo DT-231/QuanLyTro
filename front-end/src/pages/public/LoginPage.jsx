@@ -41,60 +41,63 @@ export default function LoginPage() {
   });
 
   // --- XỬ LÝ SUBMIT VỚI DỮ LIỆU ---
- const onSubmit = async (values) => {
+const onSubmit = async (values) => {
     setLoginError("");
     setIsLoading(true);
 
     try {
-      const res = await authService.login(values.email, values.password);
-      console.log("Dữ liệu nhận được:", res);
-      if (res && res.success) {
-        const data = res.data; 
-        const user = data.user;
-        const token = data.token?.access_token || data.token;
+        const res = await authService.login(values.email, values.password);
+        console.log("Dữ liệu nhận được:", res);
 
-        if (user && token) {
-            login(user, token);
-            toast.success(`Chào mừng ${user.last_name || ''} ${user.first_name || ''}!`, {
-                description: "Đăng nhập thành công",
-            });
+        // --- PHẦN BẠN YÊU CẦU GIỮ NGUYÊN ---
+        if (res && res.success) {
+            const data = res.data;
+            const user = data.user;
+            const token = data.token;
 
-            setTimeout(() => {
-                if (user.role === "ADMIN") {
-                    navigate("/admin/dashboard");
-                } else {
-                    navigate("/");
-                }
-            }, 1000);
+            if (user && token) {
+                login(user, token);
+                toast.success(`Chào mừng ${user.last_name || ''} ${user.first_name || ''}!`, {
+                    description: "Đăng nhập thành công",
+                });
+
+                setTimeout(() => {
+                    if (user.role === "ADMIN") {
+                        navigate("/admin/dashboard");
+                    } else {
+                        navigate("/");
+                    }
+                }, 1000);
+            } else {
+                setLoginError("Lỗi dữ liệu phản hồi từ server");
+                toast.error("Dữ liệu tài khoản không hợp lệ.");
+            }
+        
         } else {
-            console.error("Thiếu user hoặc token", data);
-            setLoginError("Lỗi dữ liệu phản hồi từ server");
+            const msg = res?.message || "Tài khoản hoặc mật khẩu không chính xác.";
+            setLoginError(msg);
+            toast.error(msg, { description: "Vui lòng kiểm tra lại." });
         }
 
-      } else {
-       
-        const msg = res.message || "Đăng nhập thất bại";
-        setLoginError(msg);
-        toast.error(msg);
-      }
-
     } catch (error) {
-      console.log("Lỗi HTTP:", error);
-
-      if (error.response && error.response.data) {
-        const serverMessage = error.response.data.message || "Lỗi xác thực thông tin.";
-        setLoginError(serverMessage);
+        console.error("Lỗi HTTP:", error);
         
+        let errorMessage = "Đã có lỗi xảy ra.";
 
-      } else {
-        setLoginError("Không thể kết nối đến máy chủ.");
-        toast.error("Lỗi kết nối", { description: "Vui lòng kiểm tra mạng." });
-      }
+        if (error.response) {
+            errorMessage = error.response.data?.message || "Lỗi xác thực từ máy chủ.";
+        } else if (error.request) {
+            errorMessage = "Không thể kết nối đến máy chủ. Vui lòng kiểm tra đường truyền.";
+        } else {
+            errorMessage = error.message;
+        }
+        setLoginError(errorMessage);
+        toast.error("Đăng nhập thất bại", { description: errorMessage });
 
     } finally {
-      setIsLoading(false);
+        setIsLoading(false);
     }
-  };
+};
 
   return (
     <div className="flex items-center justify-center min-h-[85vh] bg-slate-50 px-4 relative">
