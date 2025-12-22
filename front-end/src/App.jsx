@@ -3,51 +3,66 @@ import { Toaster, toast } from "sonner";
 import Header from "./components/Header";
 import Sidebar from "./components/Sidebar";
 import { useAuth } from "./context/AuthContext";
+import { useState } from "react";
 
 function App() {
   const { user, logout } = useAuth();
   const location = useLocation();
-  const hideSidebarPaths = ["login", "register", "forgot-password"];
-  const shouldShowSidebar = !hideSidebarPaths.includes(location.pathname);
+
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  const hideSidebarOnPaths = ["/login", "/register", "/forgot-password"];
+  const shouldShowSidebar =
+    user &&
+    !hideSidebarOnPaths.some((path) => location.pathname.startsWith(path));
 
   const isGuest = !user || !user.role;
-  const sidebarRoleDisplay = isGuest ? 'TENANT' : user.role;
+  const sidebarRoleDisplay = isGuest ? "TENANT" : user.role;
 
-  const handleSidebarClick = (e) => {e
+  // This logic is to prevent guests from clicking on protected links
+  const handleSidebarClick = (e) => {
     if (!isGuest) return;
-    const link = e.target.closest('a');
-    
+    const link = e.target.closest("a");
+
     if (link) {
-      const href = link.getAttribute('href');
-      if (href !== '/') {
+      const href = link.getAttribute("href");
+      // Allow navigation to home, but block others
+      if (href !== "/") {
         e.preventDefault();
-        e.stopPropagation(); 
+        e.stopPropagation();
         toast.warning("Yêu cầu đăng nhập", {
           description: "Vui lòng đăng nhập để sử dụng tính năng này!",
-          duration: 1000,
+          duration: 2000,
         });
       }
     }
   };
 
   return (
-    <div className="flex flex-col h-screen w-full bg-slate-50 overflow-hidden">
+    <div className="flex flex-col h-screen w-full bg-gray-50 overflow-hidden">
       <Toaster position="top-right" richColors />
 
-      <div className="h-14 border-b bg-white shrink-0 z-50">
-        <Header user={user} onLogout={logout} />
-      </div>
+      <Header
+        user={user}
+        onLogout={logout}
+        onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+      />
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex-1 flex overflow-hidden">
         {shouldShowSidebar && (
-          <div onClickCapture={handleSidebarClick} className="h-full">
-            <Sidebar role={sidebarRoleDisplay} isGuest={isGuest} />
+          <div onClickCapture={handleSidebarClick}>
+            <Sidebar
+              role={sidebarRoleDisplay}
+              isGuest={isGuest}
+              isOpen={isSidebarOpen}
+              setIsOpen={setIsSidebarOpen}
+            />
           </div>
         )}
-        
-        <main className="flex-1 flex flex-col relative overflow-hidden">
-          <div className="flex-1 overflow-y-auto p-6 scroll-smooth">
-            <div className="mx-auto max-w-7xl pb-10">
+
+        <main className={`flex-1 transition-all duration-300 ease-in-out `}>
+          <div className="h-full overflow-y-auto p-4 md:p-6 scroll-smooth">
+            <div className="mx-auto w-full pb-10">
               <Outlet />
             </div>
           </div>

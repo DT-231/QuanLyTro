@@ -1,5 +1,4 @@
-
-import { createBrowserRouter, Outlet } from "react-router-dom"
+import { createBrowserRouter, Outlet } from "react-router-dom";
 import App from "./App";
 import ProtectedRoute from "./components/ProtectedRoute";
 
@@ -8,6 +7,7 @@ import HomePage from "./pages/public/HomePage";
 import LoginPage from "./pages/public/LoginPage";
 import RegisterPage from "./pages/public/RegisterPage";
 import ForgotPasswordPage from "./pages/public/ForgotPasswordPage";
+import RoomDetailPage from "./pages/public/Room/RoomDetailPage";
 
 // ================== Admin Pages ==================
 import DashboardAdmin from "./pages/admin/DashboardAdmin";
@@ -44,22 +44,26 @@ const router = createBrowserRouter([
       { path: "login", element: <LoginPage /> },
       { path: "register", element: <RegisterPage /> },
       { path: "forgot-password", element: <ForgotPasswordPage /> },
+      { path: "/room/:id", element: <RoomDetailPage /> },
       // ================== MEMBER ROUTES ==================
       {
         path: "member",
         element: (
           <ProtectedRoute allowedRoles={["user", "TENANT", "CUSTOMER"]}>
-            <Outlet /> 
+            <Outlet />
           </ProtectedRoute>
         ),
         children: [
-          { index: true, element: <ProfilePage /> }, 
-          { path: "profile", element: <ProfilePage /> }, 
+          { index: true, element: <ProfilePage /> },
+          { path: "profile", element: <ProfilePage /> },
           { path: "my-contracts", element: <MyContractsPage /> },
           { path: "my-invoices", element: <MyInvoicesPage /> },
           { path: "incidents", element: <IssueReport /> },
           { path: "account/profile", element: <AccountProfile /> },
-          { path: "account/change-password", element: <AccountChangePassword /> },
+          {
+            path: "account/change-password",
+            element: <AccountChangePassword />,
+          },
           { path: "account/change-phone", element: <AccountChangePhone /> },
         ],
       },
@@ -68,12 +72,12 @@ const router = createBrowserRouter([
         path: "admin",
         element: (
           <ProtectedRoute allowedRoles={["ADMIN"]}>
-             <Outlet />
+            <Outlet />
           </ProtectedRoute>
         ),
         children: [
-          { index: true, element: <DashboardAdmin /> }, 
-          { path: "dashboard", element: <DashboardAdmin /> }, 
+          { index: true, element: <DashboardAdmin /> },
+          { path: "dashboard", element: <DashboardAdmin /> },
           { path: "users", element: <AccountManagement /> },
           { path: "buildings", element: <BuildingManagement /> },
           { path: "rooms", element: <RoomManagement /> },
