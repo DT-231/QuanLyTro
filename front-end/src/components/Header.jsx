@@ -1,9 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-// Bạn có thể import icon nếu muốn (ví dụ từ react-icons)
-// import { FaUser, FaCog, FaSignOutAlt } from 'react-icons/fa';
+import { Menu } from 'lucide-react';
 
-export default function Header({ user, onLogout, onOpenLogin }) {
+export default function Header({ user, onLogout, onToggleSidebar }) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   
   const dropdownRef = useRef(null);
@@ -23,13 +22,20 @@ export default function Header({ user, onLogout, onOpenLogin }) {
   return (
     <header className="w-full bg-white border-b shadow-sm h-14 flex items-center justify-between px-4 sticky top-0 z-20">
       
-      {/* --- LOGO --- */}
       <div className="flex items-center gap-3">
-        <div className="w-9 h-9 bg-black text-white rounded-lg flex items-center justify-center text-sm font-bold">N1</div>
-        <div className="leading-tight">
-          <h1 className="text-xm font-bold text-gray-900">Nhóm 1</h1>
-          <p className="text-xs text-gray-500">Hệ thống phòng trọ</p>
-        </div>
+        {/* Hamburger Menu Icon */}
+        <button onClick={onToggleSidebar} className="lg:hidden text-gray-600 hover:text-gray-900">
+          <Menu size={24} />
+        </button>
+
+        {/* --- LOGO --- */}
+        <Link to="/" className="flex items-center gap-3">
+          <div className="w-9 h-9 bg-black text-white rounded-lg flex items-center justify-center text-sm font-bold shrink-0">N1</div>
+          <div className="leading-tight hidden sm:block">
+            <h1 className="text-xm font-bold text-gray-900">Nhóm 1</h1>
+            <p className="text-xs text-gray-500">Hệ thống phòng trọ</p>
+          </div>
+        </Link>
       </div>
 
       <div className="flex items-center gap-2">

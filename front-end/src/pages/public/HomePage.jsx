@@ -16,6 +16,7 @@ import useDebounce from "@/hooks/useDebounce";
 import { X } from "lucide-react";
 import Pagination from "@/components/Pagination";
 import formatPrice from "@/Utils/formatPrice";
+import { Link } from "react-router-dom";
 
 const defaultCity = {
   id: null,
@@ -46,6 +47,7 @@ const HomePage = () => {
   const [listCitys, setListCitys] = useState([]);
   const [listWards, setListWards] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
+
   const fetchRooms = async () => {
     setIsLoading(true);
     try {
@@ -54,16 +56,17 @@ const HomePage = () => {
         city: selectedCity.id ? selectedCity.name : undefined,
         ward: selectedWard.id ? selectedWard.name : undefined,
         capacity: capacity || undefined,
+        page: currentPage || 1,
+        pageSize: 20,
       });
 
       if (res?.success) {
-        console.log(res.data);
         setRooms(res.data.items || res.data);
 
         // Cập nhật pagination với cấu trúc mới
         if (res.data.pagination) {
           setPagination(res.data.pagination);
-          setCurrentPage(pagination.page);
+          // setCurrentPage(pagination.page); // Dòng này có thể gây lỗi, xem lưu ý
         }
       }
     } catch (error) {
@@ -75,7 +78,7 @@ const HomePage = () => {
 
   useEffect(() => {
     fetchRooms();
-  }, [debounceSearchValue, selectedCity, selectedWard, capacity]);
+  }, [debounceSearchValue, selectedCity, selectedWard, capacity, currentPage]);
 
   useEffect(() => {
     fetchCity();
@@ -88,7 +91,6 @@ const HomePage = () => {
 
   const fetchWard = async (provide_id) => {
     let res = await getWard(provide_id);
-    console.log(res);
     setListWards(res);
   };
 
@@ -183,17 +185,16 @@ const HomePage = () => {
         </div>
       </section>
 
-      {/* Danh sách phòng - ĐÃ SỬA */}
       <section className="">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 md:mb-6 gap-2">
           <h1 className="text-2xl md:text-4xl font-bold">
             Danh sách phòng trọ
           </h1>
-          {!isLoading && pagination.totalItems * pagination.totalPages > 0 && (
+          {!isLoading && pagination.totalItems > 0 && (
             <p className="text-sm md:text-base text-gray-600">
               Kết quả:
               <span className="font-semibold text-zinc-900">
-                {pagination.totalItems * pagination.totalPages}
+                {pagination.totalItems}
               </span>{" "}
               phòng
             </p>
@@ -206,48 +207,57 @@ const HomePage = () => {
             </div>
           ) : rooms.length > 0 ? (
             rooms.map((room) => (
-              <div
+              <Link
+                to={`/room/${room.id}`}
                 key={room.id}
-                className="flex w-full h-auto bg-white rounded-lg p-2.5 gap-2.5 shadow-md border border-gray-100 cursor-pointer hover:shadow-xl transition-shadow duration-300"
+                className="flex w-full h-auto max-h-80 bg-white rounded-lg p-2.5 gap-2.5 shadow-md border border-gray-100 cursor-pointer hover:shadow-xl transition-shadow duration-300"
               >
+                {console.log(room)}
                 <img
-                  src={
-                    room.primary_photo || "https://placehold.net/400x400.png"
-                  }
+                  src={(() => {
+                    const photoToShow = room.primary_photo;
+                    if (photoToShow && photoToShow) {
+                      return photoToShow.startsWith("data:image/")
+                        ? photoToShow
+                        : `data:image/png;base64,${photoToShow}`;
+                    }
+                    return "https://placehold.net/400x400.png";
+                  })()}
                   alt={`${room.room_name} ${room.full_address}`}
                   onError={(e) => {
                     e.target.onerror = null;
                     e.target.src = "https://placehold.net/400x400.png";
                   }}
-                  className="w-[200px] h-full object-cover rounded-md flex-none self-stretch"
+                  className="w-3xs h-64 object-cover rounded-md flex-none self-stretch"
                 />
 
-                <div className="flex flex-col justify-between  w-full py-2.5">
-                  <div className="flex flex-col gap-2.5">
-                    <h3 className="h-auto md:h-12 font-semibold text-lg leading-[22px] tracking-wide text-black">
-                      {room.room_name || room.name}
+                <div className="flex flex-col justify-between  w-full py-2">
+                  <div className="flex flex-col gap-2">
+                    <h3 className="font-semibold text-lg leading-[22px] tracking-wide text-black">
+                      {room.room_name}
                     </h3>
                     <p className="text-base text-black">
                       {room.full_address || room.address}
                     </p>
-                    <div className="flex items-center gap-2.5 text-base text-black">
+                    <div className="flex items-center gap-2 text-base text-black">
                       <span>{room.area}m²</span>
                       <span className="w-1.5 h-1.5 bg-gray-300 rounded-full"></span>
                       <span>{room.capacity} người</span>
                     </div>
-                    <p className="h-auto text-sm text-gray-500">
-                      {room.description}
+                    <p className="text-sm text-gray-500 line-clamp-2">
+                      {room.description ||
+                        "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum."}
                     </p>
                   </div>
 
-                  <div className="flex flex-col items-end mt-2 md:mt-0">
+                  <div className="flex flex-col items-end mt-2">
                     <p className="font-semibold text-base tracking-wide text-green-500">
                       {/* {(room.base_price || room.price)?.toLocaleString("vi-VN")}{" "} */}
                       {formatPrice(room.base_price)} VNĐ
                     </p>
                   </div>
                 </div>
-              </div>
+              </Link>
             ))
           ) : (
             <div className="col-span-full flex flex-col items-center justify-center py-12 text-gray-500">

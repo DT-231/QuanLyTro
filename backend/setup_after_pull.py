@@ -123,6 +123,41 @@ def run_migrations():
         print("⚠️  Không tìm thấy alembic.ini, bỏ qua migration")
         return True
     
+    # Kiểm tra xem có multiple heads không
+    try:
+        result = subprocess.run(
+            [python_path, "-m", "alembic", "heads"],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        
+        # Đếm số dòng có "(head)" trong output
+        head_count = result.stdout.count("(head)")
+        
+        if head_count > 1:
+            print(f"\n⚠️  Phát hiện {head_count} migration heads!")
+            print("Đang tự động merge các heads...")
+            
+            # Chạy merge
+            merge_result = subprocess.run(
+                [python_path, "-m", "alembic", "merge", "-m", "merge_multiple_heads", "heads"],
+                capture_output=True,
+                text=True
+            )
+            
+            if merge_result.returncode == 0:
+                print("✅ Đã tạo merge migration thành công!")
+            else:
+                print(f"⚠️  Không thể tự động merge: {merge_result.stderr}")
+                print("\nVui lòng chạy thủ công:")
+                print("  python scripts/fix_multiple_heads.py")
+                return False
+                
+    except Exception as e:
+        print(f"⚠️  Không thể kiểm tra heads: {e}")
+    
+    # Chạy migration
     return run_command(
         [python_path, "-m", "alembic", "upgrade", "head"],
         "Chạy database migrations"

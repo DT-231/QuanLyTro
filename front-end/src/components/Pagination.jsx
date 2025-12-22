@@ -1,24 +1,26 @@
-import React from 'react';
+import React from "react";
 import { FiChevronLeft, FiChevronRight } from "react-icons/fi";
 
-const Pagination = ({ 
-  currentPage, 
-  totalPages, 
-  onPageChange, 
-  totalItems = 0, 
-  itemName = "kết quả" 
+const Pagination = ({
+  currentPage,
+  totalPages,
+  onPageChange,
+  totalItems = 0,
+  itemName = "kết quả",
 }) => {
   const handlePageChange = (page) => {
     if (page >= 1 && page <= totalPages && page !== currentPage) {
       onPageChange(page);
     }
   };
-  const itemsPerPage = totalPages > 0 && totalItems > 0 ? Math.ceil(totalItems / totalPages) : 0;
-const startItem = itemsPerPage > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0;
-const endItem = itemsPerPage > 0 ? Math.min(currentPage * itemsPerPage, totalItems) : 0;
+  const itemsPerPage =
+    totalPages > 0 && totalItems > 0 ? Math.ceil(totalItems / totalPages) : 0;
+  const startItem = itemsPerPage > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0;
+  const endItem =
+    itemsPerPage > 0 ? Math.min(currentPage * itemsPerPage, totalItems) : 0;
 
   return (
-    <div className="p-4 bg-white flex flex-col sm:flex-row justify-between items-center gap-4 border-t border-gray-100">
+    <div className="my-2  flex flex-col sm:flex-row justify-between items-center gap-4 ">
       <span className="text-xs text-gray-500 font-medium">
         Trang {currentPage} / {totalPages || 1}
       </span>
@@ -45,7 +47,7 @@ const endItem = itemsPerPage > 0 ? Math.min(currentPage * itemsPerPage, totalIte
               className={`px-3 py-1 rounded text-sm ${
                 currentPage === pageNum
                   ? "bg-gray-100 text-black font-medium"
-                    : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"
+                  : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"
               }`}
             >
               {pageNum}

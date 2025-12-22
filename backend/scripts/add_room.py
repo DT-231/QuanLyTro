@@ -88,10 +88,10 @@ def import_rooms():
         for room_idx, room in enumerate(rooms, 1):
             room_number = room.get('room_number', 'N/A')
             room_name = room.get('room_name', 'N/A')
-            
+            # print(room)
             print(f"  [{room_idx}/{len(rooms)}] {room_number} - {room_name}...", end=" ")
             
-            success, result = create_room(room)
+            success, result = create_room(room,building_id)
             
             if success:
                 print("✓ Thành công")
