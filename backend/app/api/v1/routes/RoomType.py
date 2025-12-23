@@ -153,16 +153,12 @@ def update_room_type(
     API để xóa loại phòng.
     
     **Yêu cầu authentication (Admin).**
-    
-    Query params:
-    - soft: True = soft delete (set is_active=False), False = hard delete (default True)
-    
-    Note: Hard delete chỉ nên dùng khi chắc chắn không có phòng nào sử dụng loại này.
+
+        
     """,
 )
 def delete_room_type(
     room_type_id: UUID,
-    soft: bool = Query(True, description="True = soft delete, False = hard delete"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -171,7 +167,7 @@ def delete_room_type(
     """
     try:
         service = RoomTypeService(db)
-        result = service.delete_room_type(room_type_id, soft=soft)
+        result = service.delete_room_type(room_type_id)
 
         return response.success(data={}, message=result["message"])
     except ValueError as e:
