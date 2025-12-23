@@ -64,10 +64,9 @@ def list_room_types_simple(
     try:
         service = RoomTypeService(db)
         room_types = service.list_room_types_simple(is_active=is_active, search=search)
-        
+
         return response.success(
-            data=room_types,
-            message="Lấy danh sách loại phòng thành công"
+            data=room_types, message="Lấy danh sách loại phòng thành công"
         )
     except Exception as e:
         raise BadRequestException(message=str(e))
@@ -99,16 +98,14 @@ def create_room_type(
     try:
         service = RoomTypeService(db)
         room_type = service.create_room_type(room_type_data)
-        
-        return response.success_response(
-            data=room_type,
-            message=f"Tạo loại phòng '{room_type.name}' thành công",
-            status_code=status.HTTP_201_CREATED
+
+        return response.success(
+            data=room_type, message=f"Tạo loại phòng '{room_type.name}' thành công"
         )
     except ValueError as e:
-        raise BadRequestException(detail=str(e))
+        raise BadRequestException(message=str(e))
     except Exception as e:
-        raise BadRequestException(detail=f"Lỗi khi tạo loại phòng: {str(e)}")
+        raise BadRequestException(message=f"Lỗi khi tạo loại phòng: {str(e)}")
 
 
 @router.put(
@@ -137,15 +134,14 @@ def update_room_type(
     try:
         service = RoomTypeService(db)
         room_type = service.update_room_type(room_type_id, update_data)
-        
-        return response.success_response(
-            data=room_type,
-            message=f"Cập nhật loại phòng '{room_type.name}' thành công"
+
+        return response.success(
+            data=room_type, message=f"Cập nhật loại phòng '{room_type.name}' thành công"
         )
     except ValueError as e:
-        raise BadRequestException(detail=str(e))
+        raise BadRequestException(message=str(e))
     except Exception as e:
-        raise BadRequestException(detail=f"Lỗi khi cập nhật loại phòng: {str(e)}")
+        raise BadRequestException(message=f"Lỗi khi cập nhật loại phòng: {str(e)}")
 
 
 @router.delete(
@@ -176,12 +172,9 @@ def delete_room_type(
     try:
         service = RoomTypeService(db)
         result = service.delete_room_type(room_type_id, soft=soft)
-        
-        return response.success_response(
-            data=result,
-            message=result["message"]
-        )
+
+        return response.success(data={}, message=result["message"])
     except ValueError as e:
-        raise BadRequestException(detail=str(e))
+        raise BadRequestException(message=str(e))
     except Exception as e:
-        raise BadRequestException(detail=f"Lỗi khi xóa loại phòng: {str(e)}")
+        raise BadRequestException(message=f"Lỗi khi xóa loại phòng: {str(e)}")
