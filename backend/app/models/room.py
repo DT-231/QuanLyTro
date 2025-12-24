@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from sqlalchemy import Column, String, Float, Integer, ForeignKey, Text, DECIMAL
 from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 
 from .base import BaseModel
 from app.core.Enum.roomEnum import RoomStatus
@@ -30,6 +30,10 @@ class Room(BaseModel):
     electricity_price = Column(DECIMAL(10, 2), nullable=True)  # Giá điện/kWh
     water_price_per_person = Column(DECIMAL(10, 2), nullable=True)  # Giá nước/người/tháng
     deposit_amount = Column(DECIMAL(10, 2), nullable=True)  # Tiền cọc
+    
+    # Phí dịch vụ mặc định: [{"name": "Internet", "amount": 100000}, {"name": "Parking", "amount": 50000}]
+    default_service_fees = Column(JSONB, nullable=True, default=list)
+    
     status = Column(String(20), nullable=False, default=RoomStatus.AVAILABLE.value, index=True)
     description = Column(Text, nullable=True)
     

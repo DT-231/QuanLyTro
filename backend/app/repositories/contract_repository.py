@@ -366,20 +366,20 @@ class ContractRepository:
         return count > 0
     
     def get_total_tenants_in_room(self, room_id: UUID, exclude_contract_id: Optional[UUID] = None) -> int:
-        """Đếm tổng số người đang ở trong phòng từ tất cả hợp đồng ACTIVE.
+        """Đếm tổng số người đang ở/đặt trong phòng từ tất cả hợp đồng ACTIVE, PENDING, PENDING_UPDATE.
         
-        Hỗ trợ phòng ở ghép: Tính tổng number_of_tenants từ tất cả hợp đồng ACTIVE.
+        Hỗ trợ phòng ở ghép: Tính tổng number_of_tenants từ tất cả hợp đồng đang hoạt động/chờ duyệt.
         
         Args:
             room_id: UUID của phòng
             exclude_contract_id: UUID của hợp đồng cần loại trừ (dùng khi update)
             
         Returns:
-            Tổng số người đang ở trong phòng
+            Tổng số người đang ở/đặt trong phòng
             
         Example:
             - Hợp đồng 1: 2 người (ACTIVE)
-            - Hợp đồng 2: 1 người (ACTIVE)
+            - Hợp đồng 2: 1 người (PENDING)
             - Tổng: 3 người
         """
         query = (
@@ -387,7 +387,11 @@ class ContractRepository:
             .filter(
                 and_(
                     Contract.room_id == room_id,
-                    Contract.status == ContractStatus.ACTIVE.value
+                    Contract.status.in_([
+                        ContractStatus.ACTIVE.value,
+                        ContractStatus.PENDING.value,
+                        ContractStatus.PENDING_UPDATE.value
+                    ])
                 )
             )
         )

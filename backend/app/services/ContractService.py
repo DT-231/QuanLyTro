@@ -331,35 +331,51 @@ class ContractService:
         
         Luồng:
         1. Get hợp đồng
-        2. Validate không có invoice liên quan (TODO)
-        3. Nếu hợp đồng ACTIVE, chuyển phòng về AVAILABLE
-        4. Xóa hợp đồng
+        2. Validate không phải hợp đồng ACTIVE (không cho xóa)
+        3. Kiểm tra invoice liên quan và xử lý (set contract_id = null)
+        4. Nếu hợp đồng PENDING, chuyển phòng về AVAILABLE
+        5. Xóa hợp đồng
         
         Args:
             contract_id: UUID của hợp đồng
             
         Raises:
-            ValueError: Nếu không tìm thấy hoặc có invoice liên quan
+            ValueError: Nếu không tìm thấy hoặc hợp đồng đang ACTIVE
         """
         contract_orm = self.contract_repo.get_by_id(contract_id)
         if not contract_orm:
             raise ValueError(f"Không tìm thấy hợp đồng với ID: {contract_id}")
         
-        # TODO: Kiểm tra không có invoice liên quan
-        # if contract_orm.invoices:
-        #     raise ValueError("Không thể xóa hợp đồng đã có hóa đơn")
+        # KHÔNG CHO XÓA hợp đồng đang ACTIVE hoặc đang có yêu cầu chấm dứt
+        non_deletable_statuses = [
+            ContractStatus.ACTIVE.value,
+            ContractStatus.PENDING_UPDATE.value,
+            ContractStatus.TERMINATION_REQUESTED_BY_TENANT.value,
+            ContractStatus.TERMINATION_REQUESTED_BY_LANDLORD.value,
+        ]
+        if contract_orm.status in non_deletable_statuses:
+            raise ValueError(
+                f"Không thể xóa hợp đồng đang ở trạng thái '{contract_orm.status}'. "
+                "Chỉ có thể xóa hợp đồng PENDING (chờ xác nhận), EXPIRED (hết hạn) hoặc TERMINATED (đã kết thúc)."
+            )
         
-        # Nếu hợp đồng ACTIVE hoặc RESERVED, kiểm tra còn người ở không
-        if contract_orm.status in [ContractStatus.ACTIVE.value, ContractStatus.PENDING.value]:
+        # Xử lý invoice liên quan: set contract_id = null để không bị lỗi FK
+        if contract_orm.invoices:
+            from app.models.invoice import Invoice
+            for invoice in contract_orm.invoices:
+                # Giữ invoice nhưng bỏ liên kết với contract đã xóa
+                invoice.contract_id = None
+                self.db.add(invoice)
+            self.db.commit()
+        
+        # Nếu hợp đồng PENDING, kiểm tra còn người ở không
+        if contract_orm.status == ContractStatus.PENDING.value:
             room = self.room_repo.get_by_id(contract_orm.room_id)
             if room:
-                # Kiểm tra còn hợp đồng ACTIVE nào khác không (loại trừ hợp đồng sắp xóa)
                 remaining_tenants = self.contract_repo.get_total_tenants_in_room(
                     contract_orm.room_id,
                     exclude_contract_id=contract_id
                 )
-                
-                # Chỉ chuyển về AVAILABLE nếu không còn ai ở
                 if remaining_tenants == 0 and room.status in [RoomStatus.OCCUPIED.value, RoomStatus.RESERVED.value]:
                     from app.schemas.room_schema import RoomUpdate
                     room_update = RoomUpdate(status=RoomStatus.AVAILABLE.value)
@@ -367,6 +383,61 @@ class ContractService:
         
         # Xóa hợp đồng
         self.contract_repo.delete(contract_orm)
+    
+    def confirm_contract(self, contract_id: UUID, tenant_id: UUID) -> ContractOut:
+        """Tenant xác nhận hợp đồng PENDING → chuyển sang ACTIVE.
+        
+        Khi landlord tạo hợp đồng mới, nó ở trạng thái PENDING.
+        Tenant cần xác nhận để kích hoạt hợp đồng.
+        
+        Args:
+            contract_id: UUID của hợp đồng
+            tenant_id: UUID của tenant đang xác nhận
+            
+        Returns:
+            ContractOut schema
+            
+        Raises:
+            ValueError: Nếu không tìm thấy, không phải tenant, hoặc không phải PENDING
+        """
+        contract_orm = self.contract_repo.get_by_id_with_relations(contract_id)
+        if not contract_orm:
+            raise ValueError(f"Không tìm thấy hợp đồng với ID: {contract_id}")
+        
+        # Kiểm tra đây là tenant của hợp đồng
+        if contract_orm.tenant_id != tenant_id:
+            raise ValueError("Bạn không phải là khách thuê của hợp đồng này")
+        
+        # Kiểm tra trạng thái PENDING
+        if contract_orm.status != ContractStatus.PENDING.value:
+            raise ValueError(f"Hợp đồng không ở trạng thái chờ xác nhận (hiện tại: {contract_orm.status})")
+        
+        # Chuyển sang ACTIVE
+        update_data = ContractUpdate(status=ContractStatus.ACTIVE.value)
+        return self.update_contract(contract_id, update_data)
+    
+    def reject_contract(self, contract_id: UUID, tenant_id: UUID) -> None:
+        """Tenant từ chối hợp đồng PENDING → xóa hợp đồng.
+        
+        Args:
+            contract_id: UUID của hợp đồng
+            tenant_id: UUID của tenant
+            
+        Raises:
+            ValueError: Nếu không hợp lệ
+        """
+        contract_orm = self.contract_repo.get_by_id(contract_id)
+        if not contract_orm:
+            raise ValueError(f"Không tìm thấy hợp đồng với ID: {contract_id}")
+        
+        if contract_orm.tenant_id != tenant_id:
+            raise ValueError("Bạn không phải là khách thuê của hợp đồng này")
+        
+        if contract_orm.status != ContractStatus.PENDING.value:
+            raise ValueError("Chỉ có thể từ chối hợp đồng đang chờ xác nhận")
+        
+        # Xóa hợp đồng (PENDING cho phép xóa)
+        self.delete_contract(contract_id)
     
     def get_contract_stats(self) -> dict:
         """Lấy thống kê hợp đồng cho dashboard.
@@ -546,3 +617,338 @@ class ContractService:
         
         # Gọi hàm update đã có sẵn để xử lý logic chuyển phòng
         return self.update_contract(contract_id, update_data)
+
+    # ========== PENDING CHANGES METHODS ==========
+    
+    def request_contract_update(
+        self, 
+        contract_id: UUID, 
+        data: ContractUpdate, 
+        requester_id: UUID,
+        reason: Optional[str] = None
+    ) -> dict:
+        """Admin yêu cầu sửa đổi hợp đồng ACTIVE → Tạo pending change cho tenant xác nhận.
+        
+        Khi admin sửa hợp đồng đang ACTIVE, thay đổi không áp dụng ngay.
+        Thay vào đó, tạo một pending change và gửi thông báo cho tenant.
+        Tenant phải xác nhận thì mới áp dụng thay đổi.
+        
+        Args:
+            contract_id: UUID của hợp đồng
+            data: ContractUpdate schema với các thay đổi
+            requester_id: UUID của admin/landlord
+            reason: Lý do thay đổi (hiển thị cho tenant)
+            
+        Returns:
+            Dict với thông tin pending change và contract
+            
+        Raises:
+            ValueError: Nếu không hợp lệ
+        """
+        from app.models.contract_pending_change import ContractPendingChange
+        
+        contract_orm = self.contract_repo.get_by_id_with_relations(contract_id)
+        if not contract_orm:
+            raise ValueError(f"Không tìm thấy hợp đồng với ID: {contract_id}")
+        
+        # Chỉ áp dụng cho hợp đồng đang ACTIVE
+        if contract_orm.status != ContractStatus.ACTIVE.value:
+            # Nếu không phải ACTIVE, cho phép update trực tiếp
+            return {
+                "type": "direct_update",
+                "contract": self.update_contract(contract_id, data),
+                "pending_change": None
+            }
+        
+        # Chuyển ContractUpdate thành dict (chỉ các field có giá trị)
+        changes_dict = data.model_dump(exclude_unset=True, exclude_none=True)
+        
+        if not changes_dict:
+            raise ValueError("Không có thay đổi nào được cung cấp")
+        
+        # Convert các kiểu không JSON serializable (date, Decimal) sang string/float
+        from datetime import date as date_type
+        from decimal import Decimal as DecimalType
+        
+        def make_json_serializable(obj):
+            """Chuyển đổi các kiểu dữ liệu không JSON serializable."""
+            if isinstance(obj, dict):
+                return {k: make_json_serializable(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [make_json_serializable(item) for item in obj]
+            elif isinstance(obj, date_type):
+                return obj.isoformat()  # "2025-12-19"
+            elif isinstance(obj, DecimalType):
+                return float(obj)
+            else:
+                return obj
+        
+        changes_dict = make_json_serializable(changes_dict)
+        
+        # Xóa pending changes cũ nếu có
+        existing_pending = self.db.query(ContractPendingChange).filter(
+            ContractPendingChange.contract_id == contract_id,
+            ContractPendingChange.status == "PENDING"
+        ).all()
+        for old_pending in existing_pending:
+            self.db.delete(old_pending)
+        
+        # Tạo pending change mới
+        pending_change = ContractPendingChange(
+            contract_id=contract_id,
+            changes=changes_dict,
+            requested_by=requester_id,
+            reason=reason,
+            status="PENDING"
+        )
+        self.db.add(pending_change)
+        
+        # Cập nhật trạng thái contract thành PENDING_UPDATE
+        contract_orm.status = ContractStatus.PENDING_UPDATE.value
+        self.db.add(contract_orm)
+        
+        self.db.commit()
+        self.db.refresh(pending_change)
+        self.db.refresh(contract_orm)
+        
+        # Get lại với relations
+        contract_orm = self.contract_repo.get_by_id_with_relations(contract_id)
+        
+        from app.schemas.contract_schema import ContractPendingChangeOut
+        return {
+            "type": "pending_update",
+            "contract": ContractOut.model_validate(contract_orm),
+            "pending_change": ContractPendingChangeOut.model_validate(pending_change)
+        }
+    
+    def confirm_contract_update(self, contract_id: UUID, tenant_id: UUID) -> ContractOut:
+        """Tenant xác nhận thay đổi hợp đồng → Áp dụng pending changes.
+        
+        Args:
+            contract_id: UUID của hợp đồng
+            tenant_id: UUID của tenant
+            
+        Returns:
+            ContractOut sau khi áp dụng thay đổi
+            
+        Raises:
+            ValueError: Nếu không hợp lệ
+        """
+        from app.models.contract_pending_change import ContractPendingChange
+        
+        contract_orm = self.contract_repo.get_by_id_with_relations(contract_id)
+        if not contract_orm:
+            raise ValueError(f"Không tìm thấy hợp đồng với ID: {contract_id}")
+        
+        # Kiểm tra quyền
+        if contract_orm.tenant_id != tenant_id:
+            raise ValueError("Bạn không phải là khách thuê của hợp đồng này")
+        
+        # Kiểm tra trạng thái
+        if contract_orm.status != ContractStatus.PENDING_UPDATE.value:
+            raise ValueError("Hợp đồng không có thay đổi nào đang chờ xác nhận")
+        
+        # Lấy pending change
+        pending_change = self.db.query(ContractPendingChange).filter(
+            ContractPendingChange.contract_id == contract_id,
+            ContractPendingChange.status == "PENDING"
+        ).first()
+        
+        if not pending_change:
+            raise ValueError("Không tìm thấy thay đổi chờ xác nhận")
+        
+        # Áp dụng các thay đổi
+        changes = pending_change.changes
+        for key, value in changes.items():
+            if hasattr(contract_orm, key):
+                setattr(contract_orm, key, value)
+        
+        # Chuyển trạng thái về ACTIVE
+        contract_orm.status = ContractStatus.ACTIVE.value
+        
+        # Đánh dấu pending change là APPROVED
+        pending_change.status = "APPROVED"
+        
+        self.db.add(contract_orm)
+        self.db.add(pending_change)
+        self.db.commit()
+        self.db.refresh(contract_orm)
+        
+        # Get lại với relations
+        contract_orm = self.contract_repo.get_by_id_with_relations(contract_id)
+        return ContractOut.model_validate(contract_orm)
+    
+    def reject_contract_update(self, contract_id: UUID, tenant_id: UUID) -> ContractOut:
+        """Tenant từ chối thay đổi hợp đồng → Giữ nguyên hợp đồng cũ.
+        
+        Args:
+            contract_id: UUID của hợp đồng
+            tenant_id: UUID của tenant
+            
+        Returns:
+            ContractOut giữ nguyên
+            
+        Raises:
+            ValueError: Nếu không hợp lệ
+        """
+        from app.models.contract_pending_change import ContractPendingChange
+        
+        contract_orm = self.contract_repo.get_by_id_with_relations(contract_id)
+        if not contract_orm:
+            raise ValueError(f"Không tìm thấy hợp đồng với ID: {contract_id}")
+        
+        if contract_orm.tenant_id != tenant_id:
+            raise ValueError("Bạn không phải là khách thuê của hợp đồng này")
+        
+        if contract_orm.status != ContractStatus.PENDING_UPDATE.value:
+            raise ValueError("Hợp đồng không có thay đổi nào đang chờ xác nhận")
+        
+        # Lấy và đánh dấu pending change là REJECTED
+        pending_change = self.db.query(ContractPendingChange).filter(
+            ContractPendingChange.contract_id == contract_id,
+            ContractPendingChange.status == "PENDING"
+        ).first()
+        
+        if pending_change:
+            pending_change.status = "REJECTED"
+            self.db.add(pending_change)
+        
+        # Chuyển trạng thái về ACTIVE (giữ nguyên hợp đồng cũ)
+        contract_orm.status = ContractStatus.ACTIVE.value
+        self.db.add(contract_orm)
+        self.db.commit()
+        self.db.refresh(contract_orm)
+        
+        contract_orm = self.contract_repo.get_by_id_with_relations(contract_id)
+        return ContractOut.model_validate(contract_orm)
+    
+    def get_pending_changes(self, contract_id: UUID) -> list:
+        """Lấy danh sách pending changes của hợp đồng.
+        
+        Args:
+            contract_id: UUID của hợp đồng
+            
+        Returns:
+            List các pending changes
+        """
+        from app.models.contract_pending_change import ContractPendingChange
+        from app.schemas.contract_schema import ContractPendingChangeOut
+        
+        pending_changes = self.db.query(ContractPendingChange).filter(
+            ContractPendingChange.contract_id == contract_id
+        ).order_by(ContractPendingChange.created_at.desc()).all()
+        
+        return [ContractPendingChangeOut.model_validate(pc) for pc in pending_changes]
+
+    def get_available_rooms_for_contract(self, building_id: UUID) -> list[dict]:
+        """Lấy danh sách phòng có thể tạo hợp đồng mới.
+        
+        Bao gồm:
+        - Phòng AVAILABLE (trống hoàn toàn)
+        - Phòng OCCUPIED nhưng còn chỗ trống (current_occupants < capacity)
+        
+        Args:
+            building_id: UUID của tòa nhà
+            
+        Returns:
+            List dict chứa thông tin phòng + current_occupants + capacity
+        """
+        from app.models.room import Room
+        from app.models.contract import Contract
+        from sqlalchemy import func, and_
+        
+        # Subquery đếm số hợp đồng ACTIVE hoặc PENDING cho mỗi phòng
+        occupancy_subq = (
+            self.db.query(
+                Contract.room_id,
+                func.count(Contract.id).label('current_occupants')
+            )
+            .filter(Contract.status.in_([
+                ContractStatus.ACTIVE.value, 
+                ContractStatus.PENDING.value,
+                ContractStatus.PENDING_UPDATE.value
+            ]))
+            .group_by(Contract.room_id)
+            .subquery()
+        )
+        
+        # Query phòng thuộc building và còn chỗ trống
+        rooms = (
+            self.db.query(
+                Room.id,
+                Room.room_number,
+                Room.capacity,
+                Room.status,
+                func.coalesce(occupancy_subq.c.current_occupants, 0).label('current_occupants')
+            )
+            .outerjoin(occupancy_subq, Room.id == occupancy_subq.c.room_id)
+            .filter(
+                Room.building_id == building_id,
+                Room.status.in_([RoomStatus.AVAILABLE.value, RoomStatus.OCCUPIED.value])
+            )
+            .all()
+        )
+        
+        result = []
+        for room in rooms:
+            current_occupants = room.current_occupants or 0
+            # Chỉ thêm phòng nếu còn chỗ trống
+            if current_occupants < room.capacity:
+                result.append({
+                    "id": str(room.id),
+                    "room_number": room.room_number,
+                    "capacity": room.capacity,
+                    "current_occupants": current_occupants,
+                    "status": room.status
+                })
+        
+        return result
+    
+    def get_room_info_for_contract(self, room_id: UUID) -> dict:
+        """Lấy thông tin phòng để auto-fill form tạo hợp đồng.
+        
+        Args:
+            room_id: UUID của phòng
+            
+        Returns:
+            Dict chứa thông tin phòng + default_service_fees
+            
+        Raises:
+            ValueError: Nếu không tìm thấy phòng
+        """
+        from app.models.room import Room
+        from app.models.building import Building
+        from decimal import Decimal
+        
+        room = self.room_repo.get_by_id_with_relations(room_id)
+        if not room:
+            raise ValueError(f"Không tìm thấy phòng với ID: {room_id}")
+        
+        # Lấy tên tòa nhà
+        building_name = None
+        if room.building:
+            building_name = room.building.building_name
+        
+        # Parse default_service_fees từ JSON
+        service_fees = []
+        if room.default_service_fees:
+            for fee in room.default_service_fees:
+                if isinstance(fee, dict):
+                    service_fees.append({
+                        "name": fee.get("name", ""),
+                        "amount": float(fee.get("amount", 0)),
+                        "description": fee.get("description")
+                    })
+        
+        return {
+            "id": str(room.id),
+            "room_number": room.room_number,
+            "room_name": room.room_name,
+            "base_price": float(room.base_price) if room.base_price else 0,
+            "deposit_amount": float(room.deposit_amount) if room.deposit_amount else 0,
+            "electricity_price": float(room.electricity_price) if room.electricity_price else 0,
+            "water_price_per_person": float(room.water_price_per_person) if room.water_price_per_person else 0,
+            "capacity": room.capacity,
+            "default_service_fees": service_fees,
+            "building_name": building_name
+        }

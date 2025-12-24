@@ -13,12 +13,14 @@ class InvoiceStatus(BaseEnum):
     
     Theo invoice_status enum trong database:
     - PENDING: Hóa đơn đang chờ thanh toán
+    - PROCESSING: Hóa đơn đang xử lý (người thuê chọn COD, chờ chủ nhà xác nhận)
     - PAID: Hóa đơn đã được thanh toán
     - OVERDUE: Hóa đơn đã quá hạn thanh toán
     - CANCELLED: Hóa đơn đã bị hủy
     """
     
-    PENDING = "PENDING"       # Hóa đơn đang chờ thanh toán
-    PAID = "PAID"             # Hóa đơn đã được thanh toán
-    OVERDUE = "OVERDUE"       # Hóa đơn đã quá hạn thanh toán
-    CANCELLED = "CANCELLED"   # Hóa đơn đã bị hủy
+    PENDING = "PENDING"         # Hóa đơn đang chờ thanh toán
+    PROCESSING = "PROCESSING"   # Đang xử lý (COD chờ xác nhận)
+    PAID = "PAID"               # Hóa đơn đã được thanh toán
+    OVERDUE = "OVERDUE"         # Hóa đơn đã quá hạn thanh toán
+    CANCELLED = "CANCELLED"     # Hóa đơn đã bị hủy

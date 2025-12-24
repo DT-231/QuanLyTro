@@ -15,7 +15,8 @@ from app.repositories.building_repository import BuildingRepository
 from app.repositories.contract_repository import ContractRepository
 from app.schemas.room_schema import (
     RoomCreate, RoomUpdate, RoomListItem, RoomDetailOut,
-    RoomPublicDetail, RoomAdminDetail, TenantInfo, RoomPublicListItem
+    RoomPublicDetail, RoomAdminDetail, TenantInfo, RoomPublicListItem,
+    RoomServiceFeeItem
 )
 from app.schemas.room_photo_schema import RoomPhotoOut
 from app.models.room import Room
@@ -101,7 +102,21 @@ class RoomService:
         utilities = room_data.utilities or []
         photos = room_data.photos or []
         
-        room_dict = room_data.model_dump(exclude={'utilities', 'photos'})
+        room_dict = room_data.model_dump(exclude={'utilities', 'photos', 'default_service_fees'})
+        
+        # Convert default_service_fees từ Pydantic model sang dict list cho JSONB
+        # Phải convert Decimal -> float vì JSONB không serialize được Decimal
+        if room_data.default_service_fees:
+            room_dict['default_service_fees'] = [
+                {
+                    'name': fee.name,
+                    'amount': float(fee.amount) if fee.amount else 0,
+                    'description': fee.description or ''
+                }
+                for fee in room_data.default_service_fees
+            ]
+        else:
+            room_dict['default_service_fees'] = []
         
         room = self.room_repo.create_room_basic(room_dict)
         
@@ -300,8 +315,24 @@ class RoomService:
         utilities = room_data.utilities
         photo_urls = room_data.photo_urls
         
-        # UPDATE room basic info TRƯỚC (exclude utilities và photo_urls)
-        room_dict = room_data.model_dump(exclude_unset=True, exclude={'utilities', 'photo_urls'})
+        # UPDATE room basic info TRƯỚC (exclude utilities, photo_urls, default_service_fees)
+        room_dict = room_data.model_dump(
+            exclude_unset=True, 
+            exclude={'utilities', 'photo_urls', 'default_service_fees'}
+        )
+        
+        # Convert default_service_fees nếu có
+        # Phải convert Decimal -> float vì JSONB không serialize được Decimal
+        if room_data.default_service_fees is not None:
+            room_dict['default_service_fees'] = [
+                {
+                    'name': fee.name,
+                    'amount': float(fee.amount) if fee.amount else 0,
+                    'description': fee.description or ''
+                }
+                for fee in room_data.default_service_fees
+            ]
+        
         if room_dict:  # Chỉ update nếu có data
             updated_room = self.room_repo.update_room_basic(room_orm, room_dict)
         else:
@@ -538,14 +569,40 @@ class RoomService:
         
         # Trả về schema phù hợp với role
         if user_role == "ADMIN":
+            # Parse default_service_fees từ JSON
+            service_fees = self._parse_service_fees(room.default_service_fees)
+            
             return RoomAdminDetail(
                 **base_data,
+                default_service_fees=service_fees,
                 tenants=tenants,
                 created_at=room.created_at,
                 updated_at=room.updated_at
             )
         else:
             return RoomPublicDetail(**base_data)
+    
+    def _parse_service_fees(self, fees_json: list | None) -> List[RoomServiceFeeItem]:
+        """Parse JSON service fees thành list RoomServiceFeeItem.
+        
+        Args:
+            fees_json: JSON list từ database hoặc None
+            
+        Returns:
+            List[RoomServiceFeeItem]
+        """
+        if not fees_json:
+            return []
+        
+        result = []
+        for fee in fees_json:
+            if isinstance(fee, dict):
+                result.append(RoomServiceFeeItem(
+                    name=fee.get("name", ""),
+                    amount=Decimal(str(fee.get("amount", 0))),
+                    description=fee.get("description")
+                ))
+        return result
 
     def search_rooms(
         self,
@@ -645,9 +702,11 @@ class RoomService:
             building = self.building_repo.get_by_id(room.building_id)
             building_name = building.building_name if building else "N/A"
             
-            # Lấy contract active để tính current_occupants
+            # Đếm số hợp đồng ACTIVE/PENDING/PENDING_UPDATE để tính current_occupants
+            current_occupants = self.contract_repo.get_total_tenants_in_room(room.id)
+            
+            # Lấy thông tin đại diện từ contract ACTIVE nếu có
             active_contract = self.contract_repo.get_active_contract_by_room(room.id)
-            current_occupants = 1 if active_contract else 0
             representative = None
             if active_contract and hasattr(active_contract, 'tenant'):
                 tenant = active_contract.tenant

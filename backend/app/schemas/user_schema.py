@@ -168,6 +168,7 @@ class UserListItem(BaseModel):
     full_name: str  # Tên đầy đủ
     phone: Optional[str] = None
     email: EmailStr
+    cccd: Optional[str] = None  # Số CCCD/CMND
     gender: Optional[str] = None  # "Nam" hoặc "Nữ"
     district: Optional[str] = None  # Quê quán
     status: str  # "ACTIVE", "INACTIVE"

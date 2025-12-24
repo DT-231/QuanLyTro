@@ -5,8 +5,8 @@ Pydantic schemas cho Room entity - dùng cho validation và serialization.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, validator
-from typing import Optional, List
+from pydantic import BaseModel, Field, validator, model_validator
+from typing import Optional, List, Any
 from datetime import datetime
 from decimal import Decimal
 import uuid
@@ -14,6 +14,29 @@ import uuid
 from app.core.Enum.roomEnum import RoomStatus
 from app.schemas.room_photo_schema import RoomPhotoInput, RoomPhotoOut
 from app.schemas.room_type_schema import RoomTypeSimple
+
+
+class RoomServiceFeeItem(BaseModel):
+    """Schema for room default service fee item.
+    
+    Dùng để định nghĩa các loại phí dịch vụ mặc định của phòng.
+    Hỗ trợ cả format {name, amount} và {name, price} từ frontend.
+    """
+    name: str = Field(..., description="Tên dịch vụ (Internet, Parking, Vệ sinh, ...)")
+    amount: Decimal = Field(default=0, ge=0, description="Giá dịch vụ (VNĐ/tháng)")
+    description: Optional[str] = Field(None, description="Mô tả thêm")
+    
+    @model_validator(mode='before')
+    @classmethod
+    def normalize_price_to_amount(cls, data: Any) -> Any:
+        """Chuyển đổi 'price' thành 'amount' nếu frontend gửi 'price'."""
+        if isinstance(data, dict):
+            # Nếu có 'price' mà không có 'amount', dùng 'price'
+            if 'price' in data and 'amount' not in data:
+                data['amount'] = data.pop('price')
+        return data
+    
+    model_config = {"from_attributes": True}
 
 
 class RoomBase(BaseModel):
@@ -32,8 +55,25 @@ class RoomBase(BaseModel):
     electricity_price: Optional[Decimal] = Field(None, ge=0, decimal_places=2)
     water_price_per_person: Optional[Decimal] = Field(None, ge=0, decimal_places=2)
     deposit_amount: Optional[Decimal] = Field(None, ge=0, decimal_places=2)
+    
+    # Phí dịch vụ mặc định của phòng (hỗ trợ cả tên extra_costs từ frontend)
+    default_service_fees: Optional[List[RoomServiceFeeItem]] = Field(
+        default_factory=list,
+        description="Phí dịch vụ mặc định: [{\"name\": \"Internet\", \"amount\": 100000}]"
+    )
+    
     status: str = Field(default=RoomStatus.AVAILABLE.value)
     description: Optional[str] = None
+    
+    @model_validator(mode='before')
+    @classmethod
+    def normalize_extra_costs(cls, data: Any) -> Any:
+        """Chuyển đổi 'extra_costs' thành 'default_service_fees' nếu frontend gửi tên cũ."""
+        if isinstance(data, dict):
+            # Nếu có 'extra_costs' mà không có 'default_service_fees', dùng 'extra_costs'
+            if 'extra_costs' in data and 'default_service_fees' not in data:
+                data['default_service_fees'] = data.pop('extra_costs')
+        return data
 
     model_config = {"from_attributes": True}
 
@@ -113,13 +153,25 @@ class RoomUpdate(BaseModel):
     status: Optional[str] = None
     description: Optional[str] = None
 
-    # Update utilities và photos
+    # Update utilities, photos và service fees
     utilities: Optional[List[str]] = Field(
         None, description="Danh sách tiện ích (replace toàn bộ)"
     )
     photo_urls: Optional[List[str]] = Field(
         None, description="Danh sách URL ảnh (replace toàn bộ)"
     )
+    default_service_fees: Optional[List[RoomServiceFeeItem]] = Field(
+        None, description="Phí dịch vụ mặc định (replace toàn bộ)"
+    )
+    
+    @model_validator(mode='before')
+    @classmethod
+    def normalize_extra_costs(cls, data: Any) -> Any:
+        """Chuyển đổi 'extra_costs' thành 'default_service_fees' nếu frontend gửi tên cũ."""
+        if isinstance(data, dict):
+            if 'extra_costs' in data and 'default_service_fees' not in data:
+                data['default_service_fees'] = data.pop('extra_costs')
+        return data
 
     @validator("utilities")
     def validate_utilities(cls, v):
@@ -316,6 +368,11 @@ class RoomAdminDetail(BaseModel):
     utilities: List[str] = Field(default_factory=list, description="Danh sách tiện ích")
     photos: List[RoomPhotoOut] = Field(
         default_factory=list, description="Tất cả ảnh của phòng"
+    )
+    
+    # Phí dịch vụ mặc định (admin mới thấy)
+    default_service_fees: List[RoomServiceFeeItem] = Field(
+        default_factory=list, description="Phí dịch vụ mặc định của phòng"
     )
 
     # Thông tin người thuê (chỉ admin)

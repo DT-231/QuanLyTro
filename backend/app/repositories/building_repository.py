@@ -171,6 +171,10 @@ class BuildingRepository:
         self,
         address_id: Optional[UUID] = None,
         status: Optional[str] = None,
+        search: Optional[str] = None,
+        city: Optional[str] = None,
+        ward: Optional[str] = None,
+        sort_by: Optional[str] = None,
         offset: int = 0,
         limit: int = 100,
     ) -> list[dict]:
@@ -179,6 +183,10 @@ class BuildingRepository:
         Args:
             address_id: Lọc theo địa chỉ (optional).
             status: Lọc theo trạng thái (optional).
+            search: Tìm kiếm theo tên tòa nhà hoặc địa chỉ (optional).
+            city: Lọc theo thành phố (optional).
+            ward: Lọc theo quận/huyện (optional).
+            sort_by: Sắp xếp (name_asc, name_desc, created_asc, created_desc).
             offset: Vị trí bắt đầu lấy dữ liệu.
             limit: Số lượng tối đa trả về.
             
@@ -243,6 +251,34 @@ class BuildingRepository:
         if status:
             query = query.filter(Building.status == status)
         
+        # Apply city filter
+        if city:
+            query = query.filter(Address.city.ilike(f"%{city}%"))
+        
+        # Apply ward filter
+        if ward:
+            query = query.filter(Address.ward.ilike(f"%{ward}%"))
+        
+        # Apply search filter - tìm theo tên tòa nhà hoặc địa chỉ
+        if search:
+            search_pattern = f"%{search}%"
+            query = query.filter(
+                (Building.building_name.ilike(search_pattern))
+                | (Address.full_address.ilike(search_pattern))
+                | (Building.building_code.ilike(search_pattern))
+            )
+        
+        # Apply sorting
+        if sort_by == "name_asc":
+            query = query.order_by(Building.building_name.asc())
+        elif sort_by == "name_desc":
+            query = query.order_by(Building.building_name.desc())
+        elif sort_by == "created_asc":
+            query = query.order_by(Building.created_at.asc())
+        else:
+            # Default: created_at desc (mới nhất trước)
+            query = query.order_by(Building.created_at.desc())
+        
         # Apply pagination
         results = query.offset(offset).limit(limit).all()
         
@@ -267,22 +303,49 @@ class BuildingRepository:
         self,
         address_id: Optional[UUID] = None,
         status: Optional[str] = None,
+        search: Optional[str] = None,
+        city: Optional[str] = None,
+        ward: Optional[str] = None,
     ) -> int:
         """Đếm tổng số tòa nhà theo filter.
         
         Args:
             address_id: Lọc theo địa chỉ (optional).
             status: Lọc theo trạng thái (optional).
+            search: Tìm kiếm theo tên tòa nhà hoặc địa chỉ (optional).
+            city: Lọc theo thành phố (optional).
+            ward: Lọc theo quận/huyện (optional).
             
         Returns:
             Tổng số tòa nhà.
         """
         query = self.db.query(Building)
         
+        # Join với Address nếu cần search hoặc filter city/ward
+        if search or city or ward:
+            query = query.join(Address, Building.address_id == Address.id)
+        
         if address_id:
             query = query.filter(Building.address_id == address_id)
         if status:
             query = query.filter(Building.status == status)
+        
+        # Apply city filter
+        if city:
+            query = query.filter(Address.city.ilike(f"%{city}%"))
+        
+        # Apply ward filter
+        if ward:
+            query = query.filter(Address.ward.ilike(f"%{ward}%"))
+        
+        # Apply search filter
+        if search:
+            search_pattern = f"%{search}%"
+            query = query.filter(
+                (Building.building_name.ilike(search_pattern))
+                | (Address.full_address.ilike(search_pattern))
+                | (Building.building_code.ilike(search_pattern))
+            )
             
         return query.count()
 

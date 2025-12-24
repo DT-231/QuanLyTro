@@ -155,7 +155,7 @@ def get_pending_appointments(
     """Lấy appointments chờ xử lý."""
     try:
         # Check admin role
-        if current_user.role.role_name not in ["ADMIN", "MANAGER"]:
+        if current_user.role.role_code not in ["ADMIN", "MANAGER"]:
             raise ForbiddenException(
                 message="Chỉ admin mới có quyền xem",
             )
@@ -198,7 +198,7 @@ def get_appointment(
     """Lấy chi tiết appointment."""
     try:
         # Check admin role
-        if current_user.role.role_name not in ["ADMIN", "MANAGER"]:
+        if current_user.role.role_code not in ["ADMIN", "MANAGER"]:
             raise ForbiddenException(
                 message="Chỉ admin mới có quyền xem",
             )
@@ -246,7 +246,7 @@ def update_appointment(
     """Cập nhật appointment (admin only)."""
     try:
         # Check admin role
-        if current_user.role.role_name not in ["ADMIN", "MANAGER"]:
+        if current_user.role.role_code not in ["ADMIN", "MANAGER"]:
             raise BadRequestException(
                 message="Chỉ admin mới có quyền cập nhật",
             )
@@ -288,7 +288,7 @@ def delete_appointment(
     """Xóa appointment (admin only)."""
     try:
         # Check admin role
-        if current_user.role.role_name not in ["ADMIN", "MANAGER"]:
+        if current_user.role.role_code not in ["ADMIN", "MANAGER"]:
             raise ForbiddenException(
                 message="Chỉ admin mới có quyền xóa",
             )

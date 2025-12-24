@@ -113,6 +113,24 @@ class ContractUpdate(BaseModel):
         return self
 
 
+class TenantInfo(BaseModel):
+    """Schema cho thông tin người thuê trong hợp đồng."""
+    id: UUID
+    first_name: str
+    last_name: str
+    full_name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    cccd: Optional[str] = None
+    gender: Optional[str] = None
+    date_of_birth: Optional[date] = None
+    hometown: Optional[str] = None
+    
+    model_config = {
+        "from_attributes": True
+    }
+
+
 class ContractOut(BaseModel):
     """Schema output chi tiết cho một hợp đồng.
     
@@ -125,7 +143,10 @@ class ContractOut(BaseModel):
     # Thông tin phòng và khách hàng
     room_id: UUID
     tenant_id: UUID
-    tenant_cccd: Optional[str] = None  # Số CCCD/CMND của người thuê
+    tenant_cccd: Optional[str] = None  # Số CCCD/CMND của người thuê (backward compatible)
+    
+    # Thông tin chi tiết người thuê
+    tenant: Optional[TenantInfo] = None
     
     # Thông tin thời gian
     start_date: date
@@ -166,9 +187,52 @@ class ContractOut(BaseModel):
             return [ServiceFeeItem(**item) if isinstance(item, dict) else item for item in v]
         return v
     
+    @field_validator("tenant", mode="before")
+    @classmethod
+    def parse_tenant(cls, v):
+        """Convert ORM User object thành TenantInfo với full_name."""
+        if v is None:
+            return None
+        if hasattr(v, 'first_name') and hasattr(v, 'last_name'):
+            # ORM object
+            return TenantInfo(
+                id=v.id,
+                first_name=v.first_name,
+                last_name=v.last_name,
+                full_name=f"{v.first_name} {v.last_name}".strip(),
+                email=v.email,
+                phone=v.phone,
+                cccd=v.cccd,
+                gender=getattr(v, 'gender', None),
+                date_of_birth=getattr(v, 'date_of_birth', None),
+                hometown=getattr(v, 'hometown', None),
+            )
+        return v
+    
     model_config = {
         "from_attributes": True  # Cho phép convert từ ORM model
     }
+
+
+# ========== PENDING CHANGE SCHEMAS ==========
+
+class ContractPendingChangeCreate(BaseModel):
+    """Schema để tạo pending change khi admin sửa hợp đồng ACTIVE."""
+    changes: dict = Field(..., description="Dict chứa các thay đổi: {'rental_price': 3000000, 'end_date': '2026-01-01'}")
+    reason: Optional[str] = Field(None, description="Lý do thay đổi")
+
+
+class ContractPendingChangeOut(BaseModel):
+    """Schema output cho pending change."""
+    id: UUID
+    contract_id: UUID
+    changes: dict
+    reason: Optional[str]
+    status: str  # PENDING, APPROVED, REJECTED
+    requested_by: UUID
+    created_at: Optional[datetime]
+    
+    model_config = {"from_attributes": True}
 
 
 class ContractListItem(BaseModel):

@@ -54,29 +54,13 @@ class PaymentConfirmCODRequest(BaseModel):
 class PaymentCODRequest(BaseModel):
     """Request để tạo payment COD (người thuê chọn COD)."""
     invoice_id: UUID = Field(..., description="ID của hóa đơn cần thanh toán")
-    cod_receiver_name: str = Field(..., min_length=1, max_length=200, description="Tên người nhận tiền")
-    cod_receiver_phone: str = Field(..., min_length=10, max_length=20, description="SĐT người nhận")
-    note: Optional[str] = Field(None, description="Ghi chú")
-    
-    @field_validator('cod_receiver_phone')
-    @classmethod
-    def validate_phone(cls, v: str) -> str:
-        """Validate phone number."""
-        # Remove spaces and dashes
-        phone = v.replace(' ', '').replace('-', '')
-        if not phone.isdigit():
-            raise ValueError('Phone number must contain only digits')
-        if len(phone) < 10:
-            raise ValueError('Phone number must be at least 10 digits')
-        return phone
+    notes: Optional[str] = Field(None, description="Ghi chú")
     
     class Config:
         json_schema_extra = {
             "example": {
                 "invoice_id": "123e4567-e89b-12d3-a456-426614174000",
-                "cod_receiver_name": "Nguyễn Văn A",
-                "cod_receiver_phone": "0912345678",
-                "note": "Giao tiền buổi chiều"
+                "notes": "Thanh toán tiền mặt"
             }
         }
 

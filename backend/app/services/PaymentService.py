@@ -19,6 +19,7 @@ from app.schemas.payment_schema import (
     PaymentResponse,
     PayOSWebhookData
 )
+from app.core.Enum.invoiceEnum import InvoiceStatus
 import logging
 
 logger = logging.getLogger(__name__)
@@ -34,7 +35,7 @@ class PaymentService:
     
     def _get_invoice_or_404(self, invoice_id: uuid.UUID) -> Invoice:
         """Lấy invoice hoặc raise 404."""
-        invoice = self.db.query(Invoice).filter(Invoice.invoice_id == invoice_id).first()
+        invoice = self.db.query(Invoice).filter(Invoice.id == invoice_id).first()
         if not invoice:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -45,7 +46,7 @@ class PaymentService:
     def _calculate_invoice_total(self, invoice: Invoice) -> Decimal:
         """Tính tổng tiền của invoice."""
         electricity_amount = Decimal(0)
-        if invoice.electricity_new_index and invoice.electricity_old_index:
+        if invoice.electricity_new_index is not None and invoice.electricity_old_index is not None:
             electricity_consumed = invoice.electricity_new_index - invoice.electricity_old_index
             electricity_amount = Decimal(str(electricity_consumed)) * invoice.electricity_unit_price
         
@@ -83,7 +84,7 @@ class PaymentService:
         invoice = self._get_invoice_or_404(request.invoice_id)
         
         # Check if invoice already paid
-        existing_payments = self.repo.get_completed_payments(invoice.invoice_id)
+        existing_payments = self.repo.get_completed_payments(invoice.id)
         if existing_payments:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -104,7 +105,7 @@ class PaymentService:
         
         payment = Payment(
             payment_id=payment_id,
-            invoice_id=invoice.invoice_id,
+            invoice_id=invoice.id,
             payer_id=payer_id,
             amount=total_amount,
             method=Payment.PaymentMethod.BANKING,
@@ -175,7 +176,7 @@ class PaymentService:
         invoice = self._get_invoice_or_404(request.invoice_id)
         
         # Check if invoice already paid
-        existing_payments = self.repo.get_completed_payments(invoice.invoice_id)
+        existing_payments = self.repo.get_completed_payments(invoice.id)
         if existing_payments:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -190,17 +191,19 @@ class PaymentService:
         
         payment = Payment(
             payment_id=payment_id,
-            invoice_id=invoice.invoice_id,
+            invoice_id=invoice.id,
             payer_id=payer_id,
             amount=total_amount,
             method=Payment.PaymentMethod.COD,
             status=Payment.PaymentStatus.PENDING,
-            cod_receiver_name=request.cod_receiver_name,
-            cod_receiver_phone=request.cod_receiver_phone,
-            note=request.note
+            note=request.notes
         )
         
         self.db.add(payment)
+        
+        # Update invoice status to PROCESSING (đang xử lý - chờ chủ nhà xác nhận COD)
+        invoice.status = InvoiceStatus.PROCESSING.value
+        
         self.db.commit()
         self.db.refresh(payment)
         
@@ -249,6 +252,11 @@ class PaymentService:
         payment.paid_at = datetime.now()
         if request.note:
             payment.note = f"{payment.note or ''}\n[Landlord confirmed] {request.note}".strip()
+        
+        # 5. Update invoice status to PAID
+        invoice = self.db.query(Invoice).filter(Invoice.id == payment.invoice_id).first()
+        if invoice:
+            invoice.status = InvoiceStatus.PAID.value
         
         self.db.commit()
         self.db.refresh(payment)

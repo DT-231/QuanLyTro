@@ -5,8 +5,8 @@ Pydantic schemas cho Invoice entity - dùng cho validation và serialization.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, validator
-from typing import Optional, List
+from pydantic import BaseModel, Field, field_validator, model_validator
+from typing import Optional, List, Self
 from datetime import datetime, date
 from decimal import Decimal
 import uuid
@@ -48,23 +48,23 @@ class InvoiceCreate(BaseModel):
     
     notes: Optional[str] = Field(None, description="Ghi chú")
     
-    @validator('electricity_new_index')
-    def validate_electricity_index(cls, v, values):
-        """Chỉ số điện mới phải >= chỉ số điện cũ."""
-        if v is not None and 'electricity_old_index' in values:
-            old_index = values.get('electricity_old_index')
-            if old_index is not None and v < old_index:
+    @model_validator(mode='after')
+    def validate_invoice_create(self) -> Self:
+        """Validate các ràng buộc giữa các trường.
+        
+        - Chỉ số điện mới phải >= chỉ số điện cũ
+        - Hạn thanh toán phải sau ngày lập hóa đơn
+        """
+        # Validate chỉ số điện
+        if self.electricity_new_index is not None and self.electricity_old_index is not None:
+            if self.electricity_new_index < self.electricity_old_index:
                 raise ValueError("Chỉ số điện mới phải lớn hơn hoặc bằng chỉ số điện cũ")
-        return v
-    
-    @validator('due_date')
-    def validate_due_date(cls, v, values):
-        """Hạn thanh toán phải sau ngày lập hóa đơn."""
-        if 'billing_month' in values:
-            billing_month = values.get('billing_month')
-            if billing_month and v < billing_month:
-                raise ValueError("Hạn thanh toán phải sau ngày lập hóa đơn")
-        return v
+        
+        # Validate hạn thanh toán
+        if self.due_date < self.billing_month:
+            raise ValueError("Hạn thanh toán phải sau ngày lập hóa đơn")
+        
+        return self
 
 
 class InvoiceUpdate(BaseModel):

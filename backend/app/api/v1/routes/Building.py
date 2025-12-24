@@ -70,8 +70,16 @@ router = APIRouter(prefix="/buildings", tags=["Building Management"])
     }
 )
 def list_buildings(
+    search: Optional[str] = Query(None, description="Tìm kiếm theo tên tòa nhà, địa chỉ"),
     address_id: Optional[UUID] = Query(None, description="Lọc theo địa chỉ"),
+    city: Optional[str] = Query(None, description="Lọc theo thành phố"),
+    ward: Optional[str] = Query(None, description="Lọc theo quận/huyện"),
     building_status: Optional[str] = Query(None, description="Lọc theo trạng thái (ACTIVE, INACTIVE, SUSPENDED)", alias="status"),
+    sort_by: Optional[str] = Query(
+        None, 
+        description="Sắp xếp theo (name_asc, name_desc, created_asc, created_desc). Mặc định: mới nhất trước",
+        regex="^(name_asc|name_desc|created_asc|created_desc)$"
+    ),
     page: int = Query(1, ge=1, description="Số trang (bắt đầu từ 1)"),
     pageSize: int = Query(20, ge=1, le=100, description="Số items mỗi trang (max 100)"),
     db: Session = Depends(get_db),
@@ -79,8 +87,12 @@ def list_buildings(
     """Lấy danh sách tòa nhà với thống kê phòng.
     
     Query params:
+    - search: Tìm kiếm theo tên tòa nhà hoặc địa chỉ
     - address_id: UUID của địa chỉ (optional)
+    - city: Lọc theo thành phố (optional)
+    - ward: Lọc theo quận/huyện (optional)
     - status: Trạng thái tòa nhà (ACTIVE, INACTIVE, SUSPENDED)
+    - sort_by: Sắp xếp (name_asc, name_desc, created_asc, created_desc)
     - page: Số trang (default 1)
     - pageSize: Số items mỗi trang (default 20, max 100)
     
@@ -116,6 +128,10 @@ def list_buildings(
         result = building_service.list_buildings(
             address_id=address_id,
             status=building_status,
+            search=search,
+            city=city,
+            ward=ward,
+            sort_by=sort_by,
             page=page,
             pageSize=pageSize,
         )

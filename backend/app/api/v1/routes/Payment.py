@@ -22,9 +22,9 @@ from app.schemas.payment_schema import (
     PaymentConfirmCODRequest,
     PayOSPaymentLinkResponse,
     PaymentResponse,
-    PaymentListResponse,
     PayOSWebhookRequest
 )
+from app.schemas.response_schema import Response
 from app.core.security import get_current_user
 from app.models.user import User
 import logging
@@ -75,7 +75,7 @@ async def create_payos_payment(
 
 @router.post(
     "/create-cod",
-    response_model=PaymentResponse,
+    response_model=Response[PaymentResponse],
     status_code=status.HTTP_201_CREATED,
     summary="Tạo thanh toán COD (Cash on Delivery)",
     description="""
@@ -96,7 +96,12 @@ def create_cod_payment(
 ):
     """Tạo payment COD."""
     try:
-        return service.create_cod_payment(request, current_user.id)
+        result = service.create_cod_payment(request, current_user.id)
+        return Response(
+            success=True,
+            message="Tạo yêu cầu thanh toán COD thành công",
+            data=result
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -109,7 +114,7 @@ def create_cod_payment(
 
 @router.post(
     "/confirm-cod",
-    response_model=PaymentResponse,
+    response_model=Response[PaymentResponse],
     status_code=status.HTTP_200_OK,
     summary="Xác nhận thanh toán COD (Chủ nhà)",
     description="""
@@ -126,8 +131,12 @@ def confirm_cod_payment(
 ):
     """Xác nhận payment COD."""
     try:
-        # TODO: Check if current_user is landlord
-        return service.confirm_cod_payment(request, current_user.id)
+        result = service.confirm_cod_payment(request, current_user.id)
+        return Response(
+            success=True,
+            message="Xác nhận thanh toán thành công",
+            data=result
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -180,7 +189,7 @@ async def payos_webhook(
 
 @router.get(
     "/{payment_id}",
-    response_model=PaymentResponse,
+    response_model=Response[PaymentResponse],
     status_code=status.HTTP_200_OK,
     summary="Lấy thông tin payment",
     description="Lấy chi tiết một payment theo ID."
@@ -192,7 +201,12 @@ def get_payment(
 ):
     """Lấy thông tin payment."""
     try:
-        return service.get_payment_by_id(payment_id)
+        result = service.get_payment_by_id(payment_id)
+        return Response(
+            success=True,
+            message="Lấy thông tin thanh toán thành công",
+            data=result
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -205,7 +219,7 @@ def get_payment(
 
 @router.get(
     "/invoice/{invoice_id}",
-    response_model=PaymentListResponse,
+    response_model=Response[list],
     status_code=status.HTTP_200_OK,
     summary="Lấy payments của invoice",
     description="Lấy tất cả payments của một hóa đơn."
@@ -217,10 +231,11 @@ def get_payments_by_invoice(
 ):
     """Lấy payments của invoice."""
     try:
-        payments = service.get_payments_by_invoice(invoice_id)
-        return PaymentListResponse(
-            payments=payments,
-            total=len(payments)
+        result = service.get_payments_by_invoice(invoice_id)
+        return Response(
+            success=True,
+            message="Lấy danh sách thanh toán thành công",
+            data=result
         )
     except HTTPException:
         raise

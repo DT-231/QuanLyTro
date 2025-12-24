@@ -10,6 +10,7 @@ from uuid import UUID
 from datetime import date, datetime
 from decimal import Decimal
 from sqlalchemy.orm import Session
+from sqlalchemy import func, extract
 
 from app.repositories.invoice_repository import InvoiceRepository
 from app.repositories.contract_repository import ContractRepository
@@ -20,6 +21,10 @@ from app.schemas.invoice_schema import (
     BuildingOption, RoomOption, ServiceFeeItem
 )
 from app.models.invoice import Invoice
+from app.models.building import Building
+from app.models.room import Room
+from app.models.contract import Contract
+from app.models.user import User
 from app.core.Enum.invoiceEnum import InvoiceStatus
 from app.core.Enum.contractEnum import ContractStatus
 from app.core.utils.uuid import generate_uuid7
@@ -41,8 +46,6 @@ class InvoiceService:
     
     def get_buildings_for_dropdown(self) -> List[BuildingOption]:
         """Lấy danh sách tòa nhà cho dropdown."""
-        from app.models.building import Building
-        
         buildings = self.db.query(Building).filter(Building.status == "ACTIVE").all()
         return [BuildingOption(id=b.id, building_name=b.building_name) for b in buildings]
     
@@ -55,9 +58,6 @@ class InvoiceService:
         Returns:
             List[RoomOption] với thông tin phòng + tenant + contract
         """
-        from app.models.room import Room
-        from app.models.contract import Contract
-        from app.models.user import User
         from sqlalchemy.orm import joinedload
         from sqlalchemy import and_
         
@@ -123,12 +123,12 @@ class InvoiceService:
         if contract.status != ContractStatus.ACTIVE.value:
             raise ValueError("Hợp đồng không còn hoạt động")
         
-        # Kiểm tra trùng hóa đơn trong tháng
-        existing_invoices = self.invoice_repo.get_invoices_by_contract(contract.id)
-        for inv in existing_invoices:
-            if inv.billing_month.year == invoice_data.billing_month.year and \
-               inv.billing_month.month == invoice_data.billing_month.month:
-                raise ValueError(f"Đã tồn tại hóa đơn cho tháng {invoice_data.billing_month.month}/{invoice_data.billing_month.year}")
+        # Kiểm tra trùng hóa đơn trong tháng (sử dụng method hiệu quả)
+        billing_year = invoice_data.billing_month.year
+        billing_month_num = invoice_data.billing_month.month
+        
+        if self.invoice_repo.exists_for_contract_month(contract.id, billing_year, billing_month_num):
+            raise ValueError(f"Đã tồn tại hóa đơn cho tháng {billing_month_num}/{billing_year}")
         
         # Lấy thông tin giá từ hợp đồng/phòng
         room = contract.room
@@ -138,7 +138,7 @@ class InvoiceService:
         
         # Tính tiền điện
         electricity_usage = 0
-        if invoice_data.electricity_new_index and invoice_data.electricity_old_index:
+        if invoice_data.electricity_new_index is not None and invoice_data.electricity_old_index is not None:
             electricity_usage = invoice_data.electricity_new_index - invoice_data.electricity_old_index
         
         # Parse service fees
@@ -161,19 +161,12 @@ class InvoiceService:
                 service_fee_description += desc
         
         # Generate invoice_number (format: INV-YYYYMM-XXX)
-        # Đếm tất cả invoices trong tháng để tạo số unique
-        from app.models.invoice import Invoice
-        from sqlalchemy import func, extract
-        
-        billing_year = invoice_data.billing_month.year
-        billing_month = invoice_data.billing_month.month
-        
         # Đếm số invoice đã tạo trong tháng này (toàn hệ thống)
         month_invoice_count = (
             self.db.query(func.count(Invoice.id))
             .filter(
                 extract('year', Invoice.billing_month) == billing_year,
-                extract('month', Invoice.billing_month) == billing_month
+                extract('month', Invoice.billing_month) == billing_month_num
             )
             .scalar()
         ) or 0
@@ -183,7 +176,6 @@ class InvoiceService:
         
         # Tạo invoice dict
         invoice_dict = {
-            "invoice_id": generate_uuid7(),
             "invoice_number": invoice_number,
             "contract_id": contract.id,
             "billing_month": invoice_data.billing_month,
@@ -342,8 +334,8 @@ class InvoiceService:
         if not invoice:
             raise ValueError("Không tìm thấy hóa đơn")
         
-        # Chỉ sửa được nếu chưa thanh toán
-        if invoice.status != InvoiceStatus.PENDING.value:
+        # Chỉ sửa được nếu chưa thanh toán (PENDING hoặc PROCESSING)
+        if invoice.status not in [InvoiceStatus.PENDING.value, InvoiceStatus.PROCESSING.value]:
             raise ValueError("Không thể sửa hóa đơn đã thanh toán hoặc đã hủy")
         
         # Parse service fees nếu có
@@ -399,9 +391,9 @@ class InvoiceService:
         # Tính toán
         electricity_usage = None
         electricity_cost = Decimal(0)
-        if invoice.electricity_new_index and invoice.electricity_old_index:
+        if invoice.electricity_new_index is not None and invoice.electricity_old_index is not None:
             electricity_usage = invoice.electricity_new_index - invoice.electricity_old_index
-            electricity_cost = Decimal(electricity_usage) * invoice.electricity_unit_price
+            electricity_cost = Decimal(str(electricity_usage)) * invoice.electricity_unit_price
         
         water_cost = invoice.number_of_people * invoice.water_unit_price
         

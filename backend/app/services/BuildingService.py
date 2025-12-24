@@ -122,6 +122,10 @@ class BuildingService:
         self,
         address_id: Optional[UUID] = None,
         status: Optional[str] = None,
+        search: Optional[str] = None,
+        city: Optional[str] = None,
+        ward: Optional[str] = None,
+        sort_by: Optional[str] = None,
         page: int = 1,
         pageSize: int = 20,
     ) -> dict:
@@ -130,6 +134,10 @@ class BuildingService:
         Args:
             address_id: Lọc theo địa chỉ (optional).
             status: Lọc theo trạng thái (optional).
+            search: Tìm kiếm theo tên tòa nhà hoặc địa chỉ (optional).
+            city: Lọc theo thành phố (optional).
+            ward: Lọc theo quận/huyện (optional).
+            sort_by: Sắp xếp (name_asc, name_desc, created_asc, created_desc).
             page: Số trang (bắt đầu từ 1).
             pageSize: Số items mỗi trang (max 100).
 
@@ -159,11 +167,24 @@ class BuildingService:
 
         # Lấy danh sách với room statistics
         items_data = self.building_repo.list_with_room_stats(
-            address_id=address_id, status=status, offset=offset, limit=pageSize
+            address_id=address_id,
+            status=status,
+            search=search,
+            city=city,
+            ward=ward,
+            sort_by=sort_by,
+            offset=offset,
+            limit=pageSize
         )
 
         # Lấy tổng số
-        totalItems = self.building_repo.count(address_id=address_id, status=status)
+        totalItems = self.building_repo.count(
+            address_id=address_id,
+            status=status,
+            search=search,
+            city=city,
+            ward=ward
+        )
 
         # Tính tổng số trang
         totalPages = (totalItems + pageSize - 1) // pageSize if totalItems > 0 else 1

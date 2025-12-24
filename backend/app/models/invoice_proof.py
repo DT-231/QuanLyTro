@@ -19,7 +19,7 @@ class InvoiceProof(BaseModel):
     """
     __tablename__ = "invoice_proofs"
     
-    invoice_id = Column(UUID(as_uuid=True), ForeignKey("invoices.invoice_id"), nullable=False, index=True)
+    invoice_id = Column(UUID(as_uuid=True), ForeignKey("invoices.id"), nullable=False, index=True)
     url = Column(String(500), nullable=False)
     uploaded_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     

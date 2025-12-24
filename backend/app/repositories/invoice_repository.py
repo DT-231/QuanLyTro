@@ -9,7 +9,7 @@ from typing import Optional, List
 from uuid import UUID
 from datetime import date
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func, and_, or_
+from sqlalchemy import func, and_, or_, extract
 
 from app.models.invoice import Invoice
 from app.models.contract import Contract
@@ -253,3 +253,32 @@ class InvoiceRepository:
             .order_by(Invoice.billing_month.desc())
             .all()
         )
+    
+    def exists_for_contract_month(
+        self,
+        contract_id: UUID,
+        year: int,
+        month: int
+    ) -> bool:
+        """Kiểm tra đã tồn tại hóa đơn cho contract trong tháng chưa.
+        
+        Phương thức hiệu quả hơn get_invoices_by_contract khi chỉ cần check tồn tại.
+        
+        Args:
+            contract_id: UUID của hợp đồng
+            year: Năm (YYYY)
+            month: Tháng (1-12)
+            
+        Returns:
+            True nếu đã tồn tại, False nếu chưa
+        """
+        count = (
+            self.db.query(func.count(Invoice.id))
+            .filter(
+                Invoice.contract_id == contract_id,
+                extract('year', Invoice.billing_month) == year,
+                extract('month', Invoice.billing_month) == month
+            )
+            .scalar()
+        )
+        return count > 0

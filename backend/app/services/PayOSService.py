@@ -8,7 +8,7 @@ import hashlib
 from datetime import datetime
 from typing import Optional, Dict, Any
 from payos import PayOS
-from payos.types import CreatePaymentLinkRequest, ItemData
+from payos.types.v2.payment_requests import CreatePaymentLinkRequest, ItemData
 from app.core.settings import settings
 import logging
 
@@ -87,8 +87,8 @@ class PayOSService:
                 buyerPhone=buyer_phone
             )
             
-            # Create payment link
-            response = self.client.create_payment_link(payment_data)
+            # Create payment link using new API
+            response = self.client.payment_requests.create(payment_data)
             
             logger.info(f"Created PayOS payment link for order {order_code}")
             
@@ -116,7 +116,7 @@ class PayOSService:
             Dict chứa thông tin payment
         """
         try:
-            response = self.client.get_payment_link_information(order_code)
+            response = self.client.payment_requests.get(order_code)
             return {
                 "id": response.id,
                 "order_code": response.order_code,
@@ -145,7 +145,7 @@ class PayOSService:
             Dict chứa thông tin hủy
         """
         try:
-            response = self.client.cancel_payment_link(order_code, reason)
+            response = self.client.payment_requests.cancel(order_code, reason)
             logger.info(f"Cancelled PayOS payment link {order_code}")
             return {
                 "id": response.id,

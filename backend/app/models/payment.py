@@ -23,7 +23,7 @@ class Payment(BaseModel):
     
     # payment_id là unique identifier riêng, không phải PK (PK là 'id' từ BaseModel)
     payment_id = Column(UUID(as_uuid=True), unique=True, nullable=False, index=True)
-    invoice_id = Column(UUID(as_uuid=True), ForeignKey("invoices.invoice_id"), nullable=False, index=True)
+    invoice_id = Column(UUID(as_uuid=True), ForeignKey("invoices.id"), nullable=False, index=True)
     payer_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
     amount = Column(DECIMAL(10, 2), nullable=False)
 
@@ -39,8 +39,25 @@ class Payment(BaseModel):
         FAILED = "failed"
         CANCELLED = "cancelled"
 
-    method = Column(SAEnum(PaymentMethod, name="payment_method"), nullable=False, index=True)
-    status = Column(SAEnum(PaymentStatus, name="payment_status"), nullable=False, server_default="pending", index=True)
+    method = Column(
+        SAEnum(
+            PaymentMethod,
+            name="payment_method",
+            values_callable=lambda x: [e.value for e in x]
+        ),
+        nullable=False,
+        index=True
+    )
+    status = Column(
+        SAEnum(
+            PaymentStatus,
+            name="payment_status",
+            values_callable=lambda x: [e.value for e in x]
+        ),
+        nullable=False,
+        server_default="pending",
+        index=True
+    )
 
     # Banking-specific fields
     bank_name = Column(String(100), nullable=True)

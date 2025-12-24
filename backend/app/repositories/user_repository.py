@@ -179,6 +179,7 @@ class UserRepository:
                 "full_name": f"{user.first_name} {user.last_name}",
                 "phone": user.phone,
                 "email": user.email,
+                "cccd": user.cccd,  # Thêm CCCD
                 "gender": user.gender,  # Lấy từ user object
                 "district": user.hometown,  # Hiển thị quê quán vào field district
                 "status": user.status,

@@ -20,7 +20,11 @@ from app.schemas.maintenance_schema import (
     MaintenanceStats,
     MaintenancePhotoOut,
 )
-from app.core.Enum.maintenanceEnum import MaintenanceStatus, MaintenancePriority, MaintenanceRequestType
+from app.core.Enum.maintenanceEnum import (
+    MaintenanceStatus,
+    MaintenancePriority,
+    MaintenanceRequestType,
+)
 
 
 class MaintenanceService:
@@ -40,9 +44,7 @@ class MaintenanceService:
         self.room_repo = RoomRepository(db)
 
     def create_maintenance(
-        self, 
-        tenant_id: UUID, 
-        maintenance_data: MaintenanceCreate
+        self, tenant_id: UUID, maintenance_data: MaintenanceCreate
     ) -> MaintenanceOut:
         """Tạo maintenance request mới (người thuê).
 
@@ -111,7 +113,7 @@ class MaintenanceService:
         return self._to_maintenance_out(maintenance)
 
     def get_maintenance(
-        self, 
+        self,
         maintenance_id: UUID,
         user_id: UUID,
         is_admin: bool = False,
@@ -176,7 +178,7 @@ class MaintenanceService:
             pageSize = 100
         if pageSize < 1:
             pageSize = 20
-        
+
         # Validate page
         if page < 1:
             page = 1
@@ -239,8 +241,8 @@ class MaintenanceService:
                 "totalItems": totalItems,
                 "page": page,
                 "pageSize": pageSize,
-                "totalPages": totalPages
-            }
+                "totalPages": totalPages,
+            },
         }
 
     def get_stats(
@@ -260,13 +262,14 @@ class MaintenanceService:
             MaintenanceStats schema.
         """
         tenant_id = None if is_admin else user_id
-        
+
         stats_data = self.maintenance_repo.get_stats(
             tenant_id=tenant_id,
             building_id=building_id,
         )
-        
-        return MaintenanceStats(**stats_data)
+
+        # return MaintenanceStats(**stats_data)
+        return stats_data
 
     def update_maintenance(
         self,
@@ -374,7 +377,7 @@ class MaintenanceService:
 
     def _to_maintenance_out(self, maintenance) -> MaintenanceOut:
         """Convert ORM model sang MaintenanceOut schema.
-        
+
         Helper method để serialize maintenance với relationship data.
         """
         return MaintenanceOut(
@@ -398,8 +401,12 @@ class MaintenanceService:
             completed_at=maintenance.completed_at,
             created_at=maintenance.created_at,
             updated_at=maintenance.updated_at,
-            photos=[
-                MaintenancePhotoOut.model_validate(photo)
-                for photo in maintenance.maintenance_photos
-            ] if maintenance.maintenance_photos else [],
+            photos=(
+                [
+                    MaintenancePhotoOut.model_validate(photo)
+                    for photo in maintenance.maintenance_photos
+                ]
+                if maintenance.maintenance_photos
+                else []
+            ),
         )

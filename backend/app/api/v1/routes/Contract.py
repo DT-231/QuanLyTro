@@ -82,6 +82,131 @@ async def get_contract_stats(session: Session = Depends(get_db)):
 
 
 @router.get(
+    "/available-rooms/{building_id}",
+    response_model=Response[list],
+    responses={
+        200: {
+            "description": "Danh sách phòng có thể tạo hợp đồng",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "code": 200,
+                        "message": "success",
+                        "data": [
+                            {
+                                "id": "uuid-string",
+                                "room_number": "101",
+                                "capacity": 2,
+                                "current_occupants": 0,
+                                "status": "AVAILABLE"
+                            },
+                            {
+                                "id": "uuid-string",
+                                "room_number": "102",
+                                "capacity": 2,
+                                "current_occupants": 1,
+                                "status": "OCCUPIED"
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+    }
+)
+async def get_available_rooms_for_contract(
+    building_id: UUID,
+    session: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Lấy danh sách phòng có thể tạo hợp đồng mới.
+    
+    Bao gồm:
+    - Phòng AVAILABLE (trống hoàn toàn)
+    - Phòng OCCUPIED còn chỗ trống (current_occupants < capacity)
+    
+    **Path Parameters:**
+    - `building_id`: UUID của tòa nhà
+    
+    **Response:**
+    - `id`: UUID phòng
+    - `room_number`: Số phòng
+    - `capacity`: Sức chứa tối đa
+    - `current_occupants`: Số người đang ở
+    - `status`: Trạng thái phòng (AVAILABLE/OCCUPIED)
+    """
+    try:
+        service = ContractService(session)
+        rooms = service.get_available_rooms_for_contract(building_id)
+        return response.success(data=rooms, message="success")
+    except ValueError as e:
+        raise BadRequestException(message=str(e))
+    except Exception as e:
+        raise InternalServerException(message=f"Lỗi hệ thống: {str(e)}")
+
+
+@router.get(
+    "/room-info/{room_id}",
+    response_model=Response[dict],
+    responses={
+        200: {
+            "description": "Thông tin phòng cho việc tạo hợp đồng",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "code": 200,
+                        "message": "success",
+                        "data": {
+                            "id": "uuid-string",
+                            "room_number": "101",
+                            "room_name": "Phòng đơn",
+                            "base_price": 3500000,
+                            "deposit_amount": 3500000,
+                            "electricity_price": 3500,
+                            "water_price_per_person": 100000,
+                            "capacity": 2,
+                            "default_service_fees": [
+                                {"name": "Internet", "amount": 100000},
+                                {"name": "Parking", "amount": 50000}
+                            ],
+                            "building_name": "Tòa A"
+                        }
+                    }
+                }
+            }
+        }
+    }
+)
+async def get_room_info_for_contract(
+    room_id: UUID,
+    session: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Lấy thông tin phòng để auto-fill form tạo hợp đồng.
+    
+    Trả về các thông tin mặc định của phòng:
+    - Giá thuê cơ bản (base_price)
+    - Tiền đặt cọc (deposit_amount)
+    - Giá điện/kWh (electricity_price)
+    - Giá nước/người (water_price_per_person)
+    - Phí dịch vụ mặc định (default_service_fees)
+    
+    Frontend dùng data này để fill sẵn vào form tạo hợp đồng.
+    
+    **Path Parameters:**
+    - `room_id`: UUID của phòng
+    """
+    try:
+        service = ContractService(session)
+        room_info = service.get_room_info_for_contract(room_id)
+        return response.success(data=room_info, message="success")
+    except ValueError as e:
+        raise BadRequestException(message=str(e))
+    except Exception as e:
+        raise InternalServerException(message=f"Lỗi hệ thống: {str(e)}")
+
+
+@router.get(
     "/",
     response_model=Response[dict],
     responses={
@@ -240,14 +365,21 @@ async def get_contract(contract_id: UUID, session: Session = Depends(get_db)):
         raise InternalServerException(message=f"Lỗi hệ thống: {str(e)}")
 
 
-@router.put("/{contract_id}", response_model=Response[ContractOut])
+@router.put("/{contract_id}", response_model=Response[dict])
 async def update_contract(
-    contract_id: UUID, payload: ContractUpdate, session: Session = Depends(get_db)
+    contract_id: UUID, 
+    payload: ContractUpdate, 
+    reason: Optional[str] = Query(None, description="Lý do thay đổi (hiển thị cho tenant)"),
+    session: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Cập nhật hợp đồng (partial update).
 
     **Path Parameters:**
     - `contract_id`: UUID của hợp đồng
+
+    **Query Parameters:**
+    - `reason`: Lý do thay đổi (optional, dùng cho hợp đồng ACTIVE)
 
     **Request Body (ContractUpdate - tất cả fields optional):**
     ```json
@@ -268,20 +400,54 @@ async def update_contract(
     ```
 
     **Business Rules:**
+    - Nếu hợp đồng đang ACTIVE: Tạo pending change, chờ tenant xác nhận
+    - Nếu hợp đồng không ACTIVE: Update trực tiếp
     - Nếu chuyển status sang TERMINATED/EXPIRED, phòng về AVAILABLE
     - Nếu chuyển status sang ACTIVE, phòng sang OCCUPIED
+    
+    **Response:**
+    - `type`: "direct_update" hoặc "pending_update"
+    - `contract`: Contract sau khi update/tạo pending
+    - `pending_change`: Thông tin pending change (nếu có)
     """
     service = ContractService(session)
+    notification_service = NotificationService(session)
     try:
-        contract = service.update_contract(contract_id, payload)
-        return response.success(data=contract, message="success")
+        result = service.request_contract_update(
+            contract_id=contract_id,
+            data=payload,
+            requester_id=current_user.id,
+            reason=reason
+        )
+        
+        # Nếu là pending update, gửi thông báo cho tenant
+        if result["type"] == "pending_update":
+            contract = result["contract"]
+            try:
+                await notification_service.create_notification(
+                    user_id=contract.tenant_id,
+                    title="Yêu cầu thay đổi hợp đồng",
+                    content=f"Chủ trọ yêu cầu thay đổi hợp đồng {contract.contract_number}. Vui lòng xem và xác nhận.",
+                    notification_type="CONTRACT",
+                    related_id=contract_id,
+                    related_type="CONTRACT"
+                )
+            except Exception as notify_error:
+                print(f"Warning: Failed to send notification: {notify_error}")
+            
+            return response.success(
+                data=result, 
+                message="Yêu cầu thay đổi đã được gửi. Chờ khách thuê xác nhận."
+            )
+        
+        return response.success(data=result, message="Cập nhật hợp đồng thành công!")
     except ValueError as e:
         raise BadRequestException(message=str(e))
     except Exception as e:
         raise InternalServerException(message=f"Lỗi hệ thống: {str(e)}")
 
 
-@router.delete("/{contract_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{contract_id}", response_model=Response[dict])
 async def delete_contract(contract_id: UUID, session: Session = Depends(get_db)):
     """Xóa hợp đồng.
 
@@ -289,13 +455,16 @@ async def delete_contract(contract_id: UUID, session: Session = Depends(get_db))
     - `contract_id`: UUID của hợp đồng
 
     **Business Rules:**
-    - Không thể xóa hợp đồng đã có invoice (TODO)
-    - Nếu hợp đồng ACTIVE, phòng sẽ về AVAILABLE
+    - KHÔNG THỂ xóa hợp đồng đang ACTIVE hoặc PENDING_UPDATE
+    - KHÔNG THỂ xóa hợp đồng đang có yêu cầu chấm dứt
+    - CHỈ xóa được: PENDING (chờ xác nhận), EXPIRED (hết hạn), TERMINATED (đã kết thúc)
+    - Nếu có invoice liên quan, sẽ bỏ liên kết (set contract_id = null)
+    - Phòng sẽ về AVAILABLE nếu không còn hợp đồng ACTIVE nào khác
     """
     service = ContractService(session)
     try:
         service.delete_contract(contract_id)
-        return response.success(message="success")
+        return response.success(data={"deleted": True}, message="Xóa hợp đồng thành công!")
     except ValueError as e:
         raise BadRequestException(message=str(e))
     except Exception as e:
@@ -465,6 +634,205 @@ async def get_room_tenants(room_id: UUID, session: Session = Depends(get_db)):
         service = ContractService(session)
         tenants_info = service.get_room_tenants_info(room_id)
         return response.success(data=tenants_info, message="success")
+    except ValueError as e:
+        raise BadRequestException(message=str(e))
+    except Exception as e:
+        raise InternalServerException(message=f"Lỗi hệ thống: {str(e)}")
+
+
+# ========== TENANT CONFIRM/REJECT CONTRACT ==========
+
+@router.post("/{contract_id}/confirm", response_model=Response[ContractOut])
+async def confirm_contract(
+    contract_id: UUID,
+    session: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Tenant xác nhận hợp đồng PENDING → Kích hoạt hợp đồng.
+    
+    **Path Parameters:**
+    - `contract_id`: UUID của hợp đồng
+    
+    **Business Rules:**
+    - Chỉ tenant của hợp đồng mới có quyền xác nhận
+    - Hợp đồng phải ở trạng thái PENDING
+    - Sau khi xác nhận, hợp đồng chuyển sang ACTIVE
+    - Phòng sẽ chuyển sang OCCUPIED
+    """
+    service = ContractService(session)
+    notification_service = NotificationService(session)
+    try:
+        contract = service.confirm_contract(contract_id, current_user.id)
+        
+        # Gửi thông báo cho admin/landlord
+        try:
+            await notification_service.create_notification(
+                user_id=contract.created_by if contract.created_by else current_user.id,
+                title="Hợp đồng đã được xác nhận",
+                content=f"Hợp đồng {contract.contract_number} đã được khách thuê xác nhận và kích hoạt.",
+                notification_type="CONTRACT",
+                related_id=contract_id,
+                related_type="CONTRACT"
+            )
+        except Exception as notify_error:
+            print(f"Warning: Failed to send notification: {notify_error}")
+        
+        return response.success(data=contract, message="Hợp đồng đã được xác nhận và kích hoạt!")
+    except ValueError as e:
+        raise BadRequestException(message=str(e))
+    except Exception as e:
+        raise InternalServerException(message=f"Lỗi hệ thống: {str(e)}")
+
+
+@router.post("/{contract_id}/reject", status_code=status.HTTP_204_NO_CONTENT)
+async def reject_contract(
+    contract_id: UUID,
+    session: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Tenant từ chối hợp đồng PENDING → Xóa hợp đồng.
+    
+    **Path Parameters:**
+    - `contract_id`: UUID của hợp đồng
+    
+    **Business Rules:**
+    - Chỉ tenant của hợp đồng mới có quyền từ chối
+    - Hợp đồng phải ở trạng thái PENDING
+    - Hợp đồng sẽ bị xóa
+    - Phòng sẽ chuyển về AVAILABLE
+    """
+    service = ContractService(session)
+    notification_service = NotificationService(session)
+    try:
+        # Lấy thông tin trước khi xóa
+        contract = service.get_contract(contract_id)
+        
+        service.reject_contract(contract_id, current_user.id)
+        
+        # Gửi thông báo cho admin/landlord
+        try:
+            await notification_service.create_notification(
+                user_id=contract.created_by if contract.created_by else current_user.id,
+                title="Hợp đồng bị từ chối",
+                content=f"Hợp đồng {contract.contract_number} đã bị khách thuê từ chối.",
+                notification_type="CONTRACT",
+                related_id=contract_id,
+                related_type="CONTRACT"
+            )
+        except Exception as notify_error:
+            print(f"Warning: Failed to send notification: {notify_error}")
+        
+        return response.success(message="Hợp đồng đã bị từ chối và xóa!")
+    except ValueError as e:
+        raise BadRequestException(message=str(e))
+    except Exception as e:
+        raise InternalServerException(message=f"Lỗi hệ thống: {str(e)}")
+
+
+# ========== PENDING UPDATE CONFIRM/REJECT ==========
+
+@router.post("/{contract_id}/confirm-update", response_model=Response[ContractOut])
+async def confirm_contract_update(
+    contract_id: UUID,
+    session: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Tenant xác nhận thay đổi hợp đồng → Áp dụng pending changes.
+    
+    **Path Parameters:**
+    - `contract_id`: UUID của hợp đồng
+    
+    **Business Rules:**
+    - Chỉ tenant của hợp đồng mới có quyền
+    - Hợp đồng phải ở trạng thái PENDING_UPDATE
+    - Các thay đổi sẽ được áp dụng
+    - Hợp đồng chuyển về ACTIVE
+    """
+    service = ContractService(session)
+    notification_service = NotificationService(session)
+    try:
+        contract = service.confirm_contract_update(contract_id, current_user.id)
+        
+        # Gửi thông báo cho admin/landlord
+        try:
+            await notification_service.create_notification(
+                user_id=contract.created_by if contract.created_by else current_user.id,
+                title="Thay đổi hợp đồng đã được chấp nhận",
+                content=f"Khách thuê đã chấp nhận thay đổi hợp đồng {contract.contract_number}.",
+                notification_type="CONTRACT",
+                related_id=contract_id,
+                related_type="CONTRACT"
+            )
+        except Exception as notify_error:
+            print(f"Warning: Failed to send notification: {notify_error}")
+        
+        return response.success(data=contract, message="Thay đổi hợp đồng đã được áp dụng!")
+    except ValueError as e:
+        raise BadRequestException(message=str(e))
+    except Exception as e:
+        raise InternalServerException(message=f"Lỗi hệ thống: {str(e)}")
+
+
+@router.post("/{contract_id}/reject-update", response_model=Response[ContractOut])
+async def reject_contract_update(
+    contract_id: UUID,
+    session: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Tenant từ chối thay đổi hợp đồng → Giữ nguyên hợp đồng cũ.
+    
+    **Path Parameters:**
+    - `contract_id`: UUID của hợp đồng
+    
+    **Business Rules:**
+    - Chỉ tenant của hợp đồng mới có quyền
+    - Hợp đồng phải ở trạng thái PENDING_UPDATE
+    - Thay đổi bị từ chối, hợp đồng giữ nguyên
+    - Hợp đồng chuyển về ACTIVE
+    """
+    service = ContractService(session)
+    notification_service = NotificationService(session)
+    try:
+        contract = service.reject_contract_update(contract_id, current_user.id)
+        
+        # Gửi thông báo cho admin/landlord
+        try:
+            await notification_service.create_notification(
+                user_id=contract.created_by if contract.created_by else current_user.id,
+                title="Thay đổi hợp đồng bị từ chối",
+                content=f"Khách thuê đã từ chối thay đổi hợp đồng {contract.contract_number}. Hợp đồng giữ nguyên.",
+                notification_type="CONTRACT",
+                related_id=contract_id,
+                related_type="CONTRACT"
+            )
+        except Exception as notify_error:
+            print(f"Warning: Failed to send notification: {notify_error}")
+        
+        return response.success(data=contract, message="Thay đổi đã bị từ chối. Hợp đồng giữ nguyên.")
+    except ValueError as e:
+        raise BadRequestException(message=str(e))
+    except Exception as e:
+        raise InternalServerException(message=f"Lỗi hệ thống: {str(e)}")
+
+
+@router.get("/{contract_id}/pending-changes", response_model=Response[list])
+async def get_pending_changes(
+    contract_id: UUID,
+    session: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Lấy danh sách pending changes của hợp đồng.
+    
+    **Path Parameters:**
+    - `contract_id`: UUID của hợp đồng
+    
+    **Response:**
+    - List các pending changes với thông tin thay đổi
+    """
+    service = ContractService(session)
+    try:
+        pending_changes = service.get_pending_changes(contract_id)
+        return response.success(data=pending_changes, message="success")
     except ValueError as e:
         raise BadRequestException(message=str(e))
     except Exception as e:

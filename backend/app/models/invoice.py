@@ -20,8 +20,6 @@ class Invoice(BaseModel):
     """
     __tablename__ = "invoices"
     
-    # invoice_id là unique identifier riêng, không phải PK (PK là 'id' từ BaseModel)
-    invoice_id = Column(UUID(as_uuid=True), unique=True, nullable=False, index=True)
     invoice_number = Column(String(50), unique=True, nullable=False, index=True)
     contract_id = Column(UUID(as_uuid=True), ForeignKey("contracts.id"), nullable=False, index=True)
     billing_month = Column(Date, nullable=False, index=True)  # YYYY-MM-01 format

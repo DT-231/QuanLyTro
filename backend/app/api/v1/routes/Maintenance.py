@@ -44,7 +44,7 @@ def is_admin(current_user: User) -> bool:
 
 @router.get(
     "/stats",
-    response_model=Response[List[MaintenanceListItem]],
+    # response_model=Response[MaintenanceListItem],
     status_code=status.HTTP_200_OK,
     responses={
         200: {

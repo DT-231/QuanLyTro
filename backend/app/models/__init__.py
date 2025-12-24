@@ -30,6 +30,7 @@ from .invoice_proof import InvoiceProof
 
 # Business logic models
 from .contract import Contract
+from .contract_pending_change import ContractPendingChange
 from .invoice import Invoice
 from .payment import Payment
 from .maintenance_request import MaintenanceRequest

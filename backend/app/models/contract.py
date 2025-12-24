@@ -50,3 +50,4 @@ class Contract(BaseModel):
     invoices = relationship("Invoice", back_populates="contract")
     reviews = relationship("Review", back_populates="contract")
     contract_documents = relationship("ContractDocument", back_populates="contract")
+    pending_changes = relationship("ContractPendingChange", back_populates="contract", cascade="all, delete-orphan")
