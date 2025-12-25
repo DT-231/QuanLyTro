@@ -25,7 +25,9 @@ class Payment(BaseModel):
     payment_id = Column(UUID(as_uuid=True), unique=True, nullable=False, index=True)
     invoice_id = Column(UUID(as_uuid=True), ForeignKey("invoices.id"), nullable=False, index=True)
     payer_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
-    amount = Column(DECIMAL(10, 2), nullable=False)
+    
+    # DECIMAL(15, 2) để hỗ trợ giá trị lớn (tới hàng nghìn tỷ VND)
+    amount = Column(DECIMAL(15, 2), nullable=False)
 
     # Payment method and status
     class PaymentMethod(enum.Enum):

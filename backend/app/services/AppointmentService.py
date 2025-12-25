@@ -14,6 +14,7 @@ from app.models.appointment import Appointment
 from app.core.Enum.appointmentEnum import AppointmentStatus
 from app.core.Enum.roomEnum import RoomStatus
 from app.services.NotificationService import NotificationService
+from app.services.EmailService import email_service
 
 
 class AppointmentService:
@@ -135,9 +136,39 @@ class AppointmentService:
                 )
 
         update_dict = update_data.model_dump(exclude_unset=True)
-        return self.appointment_repo.update(
+        updated_appointment = self.appointment_repo.update(
             appointment_id, update_dict, handled_by=admin_id
         )
+
+        # Gửi email thông báo nếu có email và trạng thái thay đổi
+        if updated_appointment and update_data.status and appointment.email:
+            try:
+                # Lấy thông tin phòng
+                room_number = "N/A"
+                building_name = "N/A"
+                if appointment.room:
+                    room_number = appointment.room.room_number
+                    if appointment.room.building:
+                        building_name = appointment.room.building.building_name
+
+                # Format thời gian
+                apt_time = appointment.appointment_datetime.strftime("%d/%m/%Y lúc %H:%M")
+
+                # Gửi email
+                email_service.send_appointment_status_notification(
+                    to_email=appointment.email,
+                    customer_name=appointment.full_name,
+                    room_number=room_number,
+                    building_name=building_name,
+                    appointment_datetime=apt_time,
+                    status=update_data.status,
+                    admin_notes=update_data.admin_notes,
+                )
+            except Exception as email_error:
+                # Log error but don't fail the update
+                print(f"[AppointmentService] Lỗi gửi email thông báo: {email_error}")
+
+        return updated_appointment
 
     def cancel_appointment(self, appointment_id: UUID) -> Optional[Appointment]:
         """
@@ -173,3 +204,19 @@ class AppointmentService:
     ) -> int:
         """Đếm số lượng appointments."""
         return self.appointment_repo.count(status=status, room_id=room_id)
+
+    def get_appointments_by_contact(
+        self, email: Optional[str] = None, phone: Optional[str] = None
+    ) -> List[Appointment]:
+        """Lấy danh sách appointments theo email hoặc phone.
+        
+        Cho phép user tra cứu lịch hẹn đã đặt mà không cần đăng nhập.
+        
+        Args:
+            email: Email người đặt lịch
+            phone: Số điện thoại người đặt lịch
+            
+        Returns:
+            List appointments khớp với thông tin liên hệ
+        """
+        return self.appointment_repo.get_by_contact(email=email, phone=phone)

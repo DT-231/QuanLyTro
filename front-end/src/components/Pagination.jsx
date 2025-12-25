@@ -1,3 +1,18 @@
+/**
+ * Pagination - Component phân trang
+ *
+ * Hiển thị:
+ * - Trang hiện tại / tổng số trang
+ * - Nút Trước/Sau
+ * - Tối đa 5 số trang cùng lúc
+ *
+ * @param {number} currentPage - Trang hiện tại (1-indexed)
+ * @param {number} totalPages - Tổng số trang
+ * @param {Function} onPageChange - Callback khi chuyển trang
+ * @param {number} totalItems - Tổng số items (optional)
+ * @param {number} pageSize - Số items mỗi trang (optional)
+ * @param {string} itemName - Tên hiển thị (vd: "phòng", "hóa đơn")
+ */
 import React from "react";
 import { FiChevronLeft, FiChevronRight } from "react-icons/fi";
 
@@ -9,14 +24,20 @@ const Pagination = ({
   pageSize = 20, 
   itemName = "kết quả",
 }) => {
+  /**
+   * Xử lý chuyển trang - kiểm tra bounds trước khi gọi callback
+   */
   const handlePageChange = (page) => {
     if (page >= 1 && page <= totalPages && page !== currentPage) {
       onPageChange(page);
     }
   };
 
+  // Tính toán item đang hiển thị (cho future use nếu muốn show "1-20 / 100")
   const startItem = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
   const endItem = Math.min(currentPage * pageSize, totalItems);
+  
+  // Tính startPage để luôn show 5 số trang (nếu có đủ)
   let startPage = 1;
   if (totalPages > 5) {
     if (currentPage <= 3) {
@@ -42,9 +63,9 @@ const Pagination = ({
           <FiChevronLeft /> Trước
         </button>
 
-        {/* --- SỬA LOGIC 3: Render số trang --- */}
+        {/* Render các số trang (tối đa 5 trang) */}
         {[...Array(Math.min(5, totalPages))].map((_, idx) => {
-          const pageNum = startPage + idx; // Logic mới đơn giản và ổn định hơn
+          const pageNum = startPage + idx;
 
           return (
             <button

@@ -23,16 +23,18 @@ class Invoice(BaseModel):
     invoice_number = Column(String(50), unique=True, nullable=False, index=True)
     contract_id = Column(UUID(as_uuid=True), ForeignKey("contracts.id"), nullable=False, index=True)
     billing_month = Column(Date, nullable=False, index=True)  # YYYY-MM-01 format
-    room_price = Column(DECIMAL(10, 2), nullable=False)
+    
+    # Các cột tiền tệ dùng DECIMAL(15, 2) để hỗ trợ giá trị lớn (tới hàng nghìn tỷ VND)
+    room_price = Column(DECIMAL(15, 2), nullable=False)
     electricity_old_index = Column(Float, nullable=True)      # Chỉ số điện cũ
     electricity_new_index = Column(Float, nullable=True)      # Chỉ số điện mới
-    electricity_unit_price = Column(DECIMAL(10, 2), nullable=False)  # Giá điện/kWh tại thời điểm lập HĐ
+    electricity_unit_price = Column(DECIMAL(15, 2), nullable=False)  # Giá điện/kWh tại thời điểm lập HĐ
     number_of_people = Column(Integer, nullable=False, default=1)  # Số người trong tháng
-    water_unit_price = Column(DECIMAL(10, 2), nullable=False)  # Giá nước/người tại thời điểm lập HĐ
-    service_fee = Column(DECIMAL(10, 2), nullable=False, default=0)    # Phí dịch vụ
-    internet_fee = Column(DECIMAL(10, 2), nullable=False, default=0)   # Phí internet
-    parking_fee = Column(DECIMAL(10, 2), nullable=False, default=0)    # Phí gửi xe
-    other_fees = Column(DECIMAL(10, 2), nullable=False, default=0)
+    water_unit_price = Column(DECIMAL(15, 2), nullable=False)  # Giá nước/người tại thời điểm lập HĐ
+    service_fee = Column(DECIMAL(15, 2), nullable=False, default=0)    # Phí dịch vụ
+    internet_fee = Column(DECIMAL(15, 2), nullable=False, default=0)   # Phí internet
+    parking_fee = Column(DECIMAL(15, 2), nullable=False, default=0)    # Phí gửi xe
+    other_fees = Column(DECIMAL(15, 2), nullable=False, default=0)
     other_fees_description = Column(Text, nullable=True)
     due_date = Column(Date, nullable=False, index=True)
     status = Column(String(20), nullable=False, default=InvoiceStatus.PENDING.value, index=True)

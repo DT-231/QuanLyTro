@@ -146,31 +146,56 @@ class NotificationService:
             notifications.append(notification)
         return notifications
 
-    async def get_user_notifications(
+    async def count_user_notifications(
         self,
         user_id: UUID,
-        skip: int = 0,
-        limit: int = 50,
         is_read: Optional[bool] = None
-    ) -> List[Notification]:
+    ) -> int:
         """
-        Lấy danh sách thông báo của người dùng.
+        Đếm tổng số thông báo của người dùng.
         
         Args:
             user_id: ID người dùng
-            skip: Số bản ghi bỏ qua
-            limit: Số bản ghi tối đa
+            is_read: Lọc theo trạng thái đọc (None = tất cả)
+            
+        Returns:
+            Tổng số thông báo
+        """
+        from sqlalchemy import func
+        stmt = select(func.count(Notification.id)).where(Notification.user_id == user_id)
+        
+        if is_read is not None:
+            stmt = stmt.where(Notification.is_read == is_read)
+        
+        result = await self.session.execute(stmt)
+        return result.scalar() or 0
+
+    async def get_user_notifications(
+        self,
+        user_id: UUID,
+        page: int = 1,
+        page_size: int = 20,
+        is_read: Optional[bool] = None
+    ) -> List[Notification]:
+        """
+        Lấy danh sách thông báo của người dùng với phân trang.
+        
+        Args:
+            user_id: ID người dùng
+            page: Số trang (bắt đầu từ 1)
+            page_size: Số bản ghi mỗi trang
             is_read: Lọc theo trạng thái đọc (None = tất cả)
             
         Returns:
             Danh sách notifications
         """
+        offset = (page - 1) * page_size
         stmt = select(Notification).where(Notification.user_id == user_id)
         
         if is_read is not None:
             stmt = stmt.where(Notification.is_read == is_read)
         
-        stmt = stmt.order_by(Notification.created_at.desc()).offset(skip).limit(limit)
+        stmt = stmt.order_by(Notification.created_at.desc()).offset(offset).limit(page_size)
         
         result = await self.session.execute(stmt)
         return list(result.scalars().all())

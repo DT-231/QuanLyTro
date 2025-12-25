@@ -160,7 +160,25 @@ const ContractDetailPage = () => {
     toast.info("Tính năng tải xuống PDF sẽ được phát triển!");
   };
 
+  /**
+   * Xử lý khi nhấn nút sửa hợp đồng
+   * Chỉ cho phép sửa hợp đồng ở trạng thái PENDING (chờ ký)
+   */
   const handleEdit = () => {
+    // Chỉ cho phép sửa nếu hợp đồng chưa ký (PENDING)
+    const nonEditableStatuses = ["ACTIVE", "EXPIRED", "TERMINATED"];
+    if (contract && nonEditableStatuses.includes(contract.status)) {
+      const statusLabels = {
+        ACTIVE: "đang hoạt động",
+        EXPIRED: "đã hết hạn",
+        TERMINATED: "đã chấm dứt"
+      };
+      toast.error(
+        `Không thể chỉnh sửa hợp đồng vì hợp đồng ${statusLabels[contract.status]}. ` +
+        `Chỉ có thể sửa hợp đồng ở trạng thái "Chờ ký".`
+      );
+      return;
+    }
     setIsEditModalOpen(true);
   };
 

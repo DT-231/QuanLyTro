@@ -1,3 +1,12 @@
+/**
+ * Sidebar - Component thanh điều hướng bên trái
+ * 
+ * Hiển thị menu điều hướng dựa trên role của user:
+ * - ADMIN: Quản lý toàn bộ hệ thống
+ * - TENANT: Khách thuê - quản lý hợp đồng, hóa đơn, sự cố
+ * - CUSTOMER/USER: Khách hàng - xem thông tin cá nhân
+ * - GUEST: Chưa đăng nhập - chỉ xem trang chủ
+ */
 import {
   Home,
   Users,
@@ -7,15 +16,24 @@ import {
   ScrollText,
   AlertTriangle,
   UserCircle,
-  Search,
   X,
   CalendarDays,
 } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { Fragment } from "react";
 
+/**
+ * Helper: Gộp các class CSS, lọc bỏ giá trị falsy
+ * @param {...string} classes - Danh sách class CSS
+ * @returns {string} Chuỗi class đã gộp
+ */
 const cn = (...classes) => classes.filter(Boolean).join(" ");
 
+// ==================================================================================
+// MENU CONFIGURATION - Cấu hình menu theo từng role
+// ==================================================================================
+
+/** Menu cho ADMIN - Quản lý toàn bộ hệ thống */
 const adminMenu = [
   { name: "Trang chủ", icon: Home, href: "/admin/dashboard" },
   { name: "Lịch hẹn", icon: CalendarDays, href: "/admin/appointments" },
@@ -27,21 +45,32 @@ const adminMenu = [
   { name: "Xử lý sự cố", icon: AlertTriangle, href: "/admin/incidents" },
 ];
 
+/** Menu cho CUSTOMER - Khách hàng chưa thuê phòng */
 const customerMenu = [
   { name: "Trang chủ", icon: Home, href: "/" },
   { name: "Hồ sơ của tôi", icon: UserCircle, href: "/member/profile" },
   { name: "Hợp đồng của tôi", icon: ScrollText, href: "/member/my-contracts" },
 ];
 
+/** Menu cho TENANT - Khách thuê đang có hợp đồng */
 const tenantMenu = [
   ...customerMenu,
   { name: "Hoá đơn cần đóng", icon: FileText, href: "/member/my-invoices" },
   { name: "Báo cáo sự cố", icon: AlertTriangle, href: "/member/incidents" },
 ];
 
+/** Menu cho GUEST - Chưa đăng nhập */
 const guestMenu = [{ name: "Trang chủ", icon: Home, href: "/" }];
 
-export default function Sidebar({ role, isGuest, isOpen, setIsOpen }) {
+/**
+ * Sidebar Component
+ * 
+ * @param {Object} props
+ * @param {string} props.role - Role của user (ADMIN, TENANT, CUSTOMER, USER)
+ * @param {boolean} props.isOpen - Trạng thái mở/đóng sidebar (mobile)
+ * @param {Function} props.setIsOpen - Hàm cập nhật trạng thái sidebar
+ */
+export default function Sidebar({ role, isOpen, setIsOpen }) {
   const location = useLocation();
 
   let menuItems = guestMenu;

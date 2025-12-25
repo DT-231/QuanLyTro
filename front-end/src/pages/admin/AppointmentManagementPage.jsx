@@ -9,6 +9,9 @@ import {
   CheckCircle,
   XCircle,
   Eye,
+  Trash2,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -39,8 +42,10 @@ import {
   getAppointments,
   getAppointmentById,
   updateAppointmentStatus,
+  deleteAppointment,
 } from "@/services/appointmentService";
 import { toast } from "sonner";
+import DeleteConfirmationModal from "@/components/modals/DeleteConfirmationModal";
 
 /**
  * AppointmentManagementPage - Quản lý lịch hẹn xem phòng (Admin)
@@ -59,6 +64,16 @@ export default function AppointmentManagementPage() {
   const [isUpdating, setIsUpdating] = useState(false);
   const [statusFilter, setStatusFilter] = useState("ALL");
 
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const pageSize = 9; // 3x3 grid
+
+  // Delete modal states
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [appointmentToDelete, setAppointmentToDelete] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const [updateData, setUpdateData] = useState({
     status: "",
     admin_notes: "",
@@ -67,23 +82,72 @@ export default function AppointmentManagementPage() {
   // Load appointments
   useEffect(() => {
     loadAppointments();
-  }, [statusFilter]);
+  }, [statusFilter, currentPage]);
 
   const loadAppointments = async () => {
     try {
       setLoading(true);
-      const params =
-        statusFilter !== "ALL" ? { status: statusFilter } : undefined;
+      const params = {
+        page: currentPage,
+        pageSize: pageSize,
+      };
+      if (statusFilter !== "ALL") {
+        params.status = statusFilter;
+      }
       const response = await getAppointments(params);
 
       if (response.success) {
         setAppointments(response.data.items || []);
+        setTotalItems(response.data.pagination?.totalItems || 0);
       }
     } catch (error) {
       console.error("Error loading appointments:", error);
       toast.error("Không thể tải danh sách lịch hẹn");
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Calculate total pages
+  const totalPages = Math.ceil(totalItems / pageSize);
+
+  // Handle page change
+  const handlePageChange = (page) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+    }
+  };
+
+  // Reset to page 1 when filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter]);
+
+  // Handle delete click
+  const handleDeleteClick = (appointment) => {
+    setAppointmentToDelete(appointment);
+    setDeleteModalOpen(true);
+  };
+
+  // Confirm delete
+  const confirmDelete = async () => {
+    if (!appointmentToDelete) return;
+
+    try {
+      setIsDeleting(true);
+      const response = await deleteAppointment(appointmentToDelete.id);
+
+      if (response.success) {
+        toast.success("Xóa lịch hẹn thành công");
+        loadAppointments();
+      }
+    } catch (error) {
+      console.error("Error deleting appointment:", error);
+      toast.error(error?.message || "Không thể xóa lịch hẹn");
+    } finally {
+      setIsDeleting(false);
+      setDeleteModalOpen(false);
+      setAppointmentToDelete(null);
     }
   };
 
@@ -246,17 +310,83 @@ export default function AppointmentManagementPage() {
                     {formatDateTime(appointment.appointment_datetime)}
                   </div>
                 </div>
-                <Button
-                  onClick={() => handleViewDetail(appointment.id)}
-                  className="w-full mt-4"
-                  variant="outline"
-                >
-                  <Eye className="mr-2 h-4 w-4" />
-                  Xem chi tiết
-                </Button>
+                <div className="flex gap-2 mt-4">
+                  <Button
+                    onClick={() => handleViewDetail(appointment.id)}
+                    className="flex-1"
+                    variant="outline"
+                  >
+                    <Eye className="mr-2 h-4 w-4" />
+                    Chi tiết
+                  </Button>
+                  <Button
+                    onClick={() => handleDeleteClick(appointment)}
+                    variant="outline"
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between mt-6">
+          <div className="text-sm text-gray-600">
+            Hiển thị {(currentPage - 1) * pageSize + 1} -{" "}
+            {Math.min(currentPage * pageSize, totalItems)} / {totalItems} lịch hẹn
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage === 1}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            
+            {/* Page numbers */}
+            <div className="flex items-center gap-1">
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let pageNum;
+                if (totalPages <= 5) {
+                  pageNum = i + 1;
+                } else if (currentPage <= 3) {
+                  pageNum = i + 1;
+                } else if (currentPage >= totalPages - 2) {
+                  pageNum = totalPages - 4 + i;
+                } else {
+                  pageNum = currentPage - 2 + i;
+                }
+                
+                return (
+                  <Button
+                    key={pageNum}
+                    variant={currentPage === pageNum ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => handlePageChange(pageNum)}
+                    className="min-w-[36px]"
+                  >
+                    {pageNum}
+                  </Button>
+                );
+              })}
+            </div>
+            
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage === totalPages}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       )}
 
@@ -396,6 +526,25 @@ export default function AppointmentManagementPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmationModal
+        isOpen={deleteModalOpen}
+        onClose={() => {
+          setDeleteModalOpen(false);
+          setAppointmentToDelete(null);
+        }}
+        onConfirm={confirmDelete}
+        itemName={appointmentToDelete?.full_name}
+        title="Xác nhận xóa lịch hẹn"
+        message={
+          appointmentToDelete
+            ? `Bạn có chắc chắn muốn xóa lịch hẹn của "${appointmentToDelete.full_name}" không? Hành động này không thể hoàn tác.`
+            : undefined
+        }
+        confirmText={isDeleting ? "Đang xóa..." : "Xóa"}
+        variant="danger"
+      />
     </div>
   );
 }

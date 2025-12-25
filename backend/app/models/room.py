@@ -26,10 +26,12 @@ class Room(BaseModel):
     room_name = Column(String(100), nullable=True)    # Ví dụ: Căn hộ 1PN
     area = Column(Float, nullable=True)               # m²
     capacity = Column(Integer, nullable=False, default=1)  # Số người tối đa
-    base_price = Column(DECIMAL(10, 2), nullable=False)    # Giá thuê cơ bản/tháng
-    electricity_price = Column(DECIMAL(10, 2), nullable=True)  # Giá điện/kWh
-    water_price_per_person = Column(DECIMAL(10, 2), nullable=True)  # Giá nước/người/tháng
-    deposit_amount = Column(DECIMAL(10, 2), nullable=True)  # Tiền cọc
+    
+    # Các cột tiền tệ dùng DECIMAL(15, 2) để hỗ trợ giá trị lớn (tới hàng nghìn tỷ VND)
+    base_price = Column(DECIMAL(15, 2), nullable=False)    # Giá thuê cơ bản/tháng
+    electricity_price = Column(DECIMAL(15, 2), nullable=True)  # Giá điện/kWh
+    water_price_per_person = Column(DECIMAL(15, 2), nullable=True)  # Giá nước/người/tháng
+    deposit_amount = Column(DECIMAL(15, 2), nullable=True)  # Tiền cọc
     
     # Phí dịch vụ mặc định: [{"name": "Internet", "amount": 100000}, {"name": "Parking", "amount": 50000}]
     default_service_fees = Column(JSONB, nullable=True, default=list)
@@ -41,8 +43,8 @@ class Room(BaseModel):
     building = relationship("Building", back_populates="rooms")
     room_type = relationship("RoomType", back_populates="rooms")
     contracts = relationship("Contract", back_populates="room")
-    maintenance_requests = relationship("MaintenanceRequest", back_populates="room")
-    reviews = relationship("Review", back_populates="room")
-    utilities = relationship("RoomUtility", back_populates="room")
-    room_photos = relationship("RoomPhoto", back_populates="room")
-    appointments = relationship("Appointment", back_populates="room")
+    maintenance_requests = relationship("MaintenanceRequest", back_populates="room", cascade="all, delete-orphan")
+    reviews = relationship("Review", back_populates="room", cascade="all, delete-orphan")
+    utilities = relationship("RoomUtility", back_populates="room", cascade="all, delete-orphan")
+    room_photos = relationship("RoomPhoto", back_populates="room", cascade="all, delete-orphan")
+    appointments = relationship("Appointment", back_populates="room", cascade="all, delete-orphan")

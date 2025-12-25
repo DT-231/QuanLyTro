@@ -1,3 +1,17 @@
+/**
+ * Header - Component thanh điều hướng phía trên
+ *
+ * Chức năng:
+ * - Hiển thị logo và tên ứng dụng
+ * - Nút hamburger menu (mobile)
+ * - Notification center
+ * - Dropdown user menu (profile, settings, logout)
+ * - Nút đăng nhập/đăng ký (nếu chưa login)
+ *
+ * @param {Object} user - Thông tin user đang đăng nhập (null nếu chưa login)
+ * @param {Function} onLogout - Callback khi click logout
+ * @param {Function} onToggleSidebar - Callback toggle sidebar (mobile)
+ */
 import React, { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Menu } from 'lucide-react';
@@ -5,9 +19,9 @@ import NotificationCenter from './NotificationCenter';
 
 export default function Header({ user, onLogout, onToggleSidebar }) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  
   const dropdownRef = useRef(null);
 
+  // Click outside để đóng dropdown
   useEffect(() => {
     function handleClickOutside(event) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -20,9 +34,7 @@ export default function Header({ user, onLogout, onToggleSidebar }) {
     };
   }, []);
 
-  // --- LOGIC XỬ LÝ ĐƯỜNG DẪN LOGO ---
-  // Bạn kiểm tra role chính xác mà backend trả về (ví dụ: 'ADMIN', 'admin', hay 'super_admin')
-  // Và đường dẫn admin dashboard của bạn (ví dụ: '/admin', '/dashboard', hay '/admin/dashboard')
+  // Điều hướng logo: Admin về /admin, User về /
   const logoPath = user?.role === 'ADMIN' ? '/admin' : '/';
 
   return (
@@ -107,6 +119,12 @@ export default function Header({ user, onLogout, onToggleSidebar }) {
         ) : (
           // --- KHI CHƯA ĐĂNG NHẬP ---
           <>
+            <Link to="/my-appointments">
+              <button className="px-4 py-1.5 rounded-full text-sm hover:bg-gray-100 transition font-medium text-gray-600">
+                Tra cứu lịch hẹn
+              </button>
+            </Link>
+            
             <Link to="/login">
               <button className="px-5 py-1.5 rounded-full bg-black text-white text-sm hover:opacity-90 transition font-medium">
                 Đăng nhập

@@ -238,10 +238,11 @@ class ContractService:
         
         Luồng:
         1. Get hợp đồng (không load relations để tránh tracking issues)
-        2. Validate business rules nếu cập nhật status
-        3. Update hợp đồng
-        4. Nếu chuyển sang TERMINATED/EXPIRED, chuyển phòng về AVAILABLE
-        5. Get lại hợp đồng với relations và trả về
+        2. Kiểm tra trạng thái - CHỈ cho phép sửa nếu hợp đồng ở trạng thái PENDING
+        3. Validate business rules nếu cập nhật status
+        4. Update hợp đồng
+        5. Nếu chuyển sang TERMINATED/EXPIRED, chuyển phòng về AVAILABLE
+        6. Get lại hợp đồng với relations và trả về
         
         Args:
             contract_id: UUID của hợp đồng
@@ -257,6 +258,25 @@ class ContractService:
         contract_orm = self.contract_repo.get_by_id(contract_id)
         if not contract_orm:
             raise ValueError(f"Không tìm thấy hợp đồng với ID: {contract_id}")
+        
+        # 2. Kiểm tra trạng thái - CHỈ cho phép sửa nếu hợp đồng ở trạng thái PENDING (chờ ký)
+        # Các trạng thái khác (ACTIVE, EXPIRED, TERMINATED, ...) không được phép sửa
+        non_editable_statuses = [
+            ContractStatus.ACTIVE.value, 
+            ContractStatus.EXPIRED.value, 
+            ContractStatus.TERMINATED.value
+        ]
+        if contract_orm.status in non_editable_statuses:
+            status_labels = {
+                ContractStatus.ACTIVE.value: "đang hoạt động",
+                ContractStatus.EXPIRED.value: "đã hết hạn",
+                ContractStatus.TERMINATED.value: "đã chấm dứt"
+            }
+            status_label = status_labels.get(contract_orm.status, contract_orm.status)
+            raise ValueError(
+                f"Không thể chỉnh sửa hợp đồng {contract_orm.contract_number} vì hợp đồng {status_label}. "
+                f"Chỉ có thể sửa hợp đồng ở trạng thái 'Chờ ký' (PENDING)."
+            )
         
         # 2. Lưu trạng thái cũ để kiểm tra
         old_status = contract_orm.status

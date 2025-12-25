@@ -36,6 +36,22 @@ export const getAppointments = async (params) => {
 };
 
 /**
+ * Tra cứu lịch hẹn của người dùng theo email hoặc phone (Public)
+ * @param {object} params - Tham số tra cứu
+ * @param {string} [params.email] - Email đã dùng khi đặt lịch
+ * @param {string} [params.phone] - Số điện thoại đã dùng khi đặt lịch
+ * @returns {Promise<object>} - Danh sách lịch hẹn
+ */
+export const getMyAppointments = async (params) => {
+  try {
+    const response = await api.get("/appointments/my-appointments", { params });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+};
+
+/**
  * Lấy chi tiết một lịch hẹn bằng ID
  * @param {string} appointmentId - ID của lịch hẹn
  * @returns {Promise<object>} - Dữ liệu trả về từ API
@@ -63,6 +79,20 @@ export const updateAppointmentStatus = async (appointmentId, updateData) => {
       `/appointments/${appointmentId}`,
       updateData
     );
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+};
+
+/**
+ * Xóa lịch hẹn (Admin only)
+ * @param {string} appointmentId - ID của lịch hẹn cần xóa
+ * @returns {Promise<object>} - Kết quả xóa
+ */
+export const deleteAppointment = async (appointmentId) => {
+  try {
+    const response = await api.delete(`/appointments/${appointmentId}`);
     return response.data;
   } catch (error) {
     throw error.response?.data || error;

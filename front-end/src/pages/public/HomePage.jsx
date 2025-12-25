@@ -1,7 +1,13 @@
+/**
+ * HomePage - Trang chủ hiển thị danh sách phòng trọ
+ *
+ * Chức năng:
+ * - Tìm kiếm phòng theo tên/tiện ích (debounce 300ms)
+ * - Lọc theo thành phố, quận/huyện, số người ở
+ * - Phân trang server-side
+ * - Hiển thị danh sách phòng dạng grid
+ */
 import { useState, useEffect } from "react";
-import RoomSearchForm from "../../components/RoomSearchForm";
-import RoomList from "../../components/RoomList";
-import RoomDetail from "../../components/RoomDetail";
 import { getCity, getWard } from "@/services/locationService";
 import { ComboboxLocation } from "./Room/Components/ComboxLocations";
 import { roomService } from "@/services/roomService";
@@ -18,6 +24,9 @@ import Pagination from "@/components/Pagination";
 import formatPrice from "@/Utils/formatPrice";
 import { Link } from "react-router-dom";
 
+// ==================================================================================
+// CONSTANTS - Giá trị mặc định cho các dropdown
+// ==================================================================================
 const defaultCity = {
   id: null,
   name: "Chọn thành phố",
@@ -27,7 +36,22 @@ const defaultWard = {
   name: "Chọn quận",
 };
 
+/**
+ * HomePage Component
+ * 
+ * State management:
+ * - rooms: Danh sách phòng từ API
+ * - pagination: Thông tin phân trang từ server
+ * - searchValue + debounceSearchValue: Tìm kiếm với debounce
+ * - selectedCity/selectedWard: Filter theo vị trí
+ * - capacity: Filter theo số người
+ */
 const HomePage = () => {
+  // ==================================================================================
+  // STATE MANAGEMENT
+  // ==================================================================================
+  
+  // Data states
   const [rooms, setRooms] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [pagination, setPagination] = useState({
@@ -37,17 +61,26 @@ const HomePage = () => {
     totalPages: 0,
   });
 
+  // Search & Filter states
   const [searchValue, setSearchValue] = useState("");
-  const debounceSearchValue = useDebounce(searchValue);
+  const debounceSearchValue = useDebounce(searchValue); // Debounce 300ms
 
   const [selectedCity, setSelectedCity] = useState(defaultCity);
   const [selectedWard, setSelectedWard] = useState(defaultWard);
   const [capacity, setCapacity] = useState(null);
 
+  // Location dropdown data
   const [listCitys, setListCitys] = useState([]);
   const [listWards, setListWards] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
 
+  // ==================================================================================
+  // API CALLS
+  // ==================================================================================
+
+  /**
+   * Fetch danh sách phòng từ API với các filter và pagination
+   */
   const fetchRooms = async () => {
     setIsLoading(true);
     try {
@@ -63,37 +96,53 @@ const HomePage = () => {
       if (res?.success) {
         setRooms(res.data.items || res.data);
 
-        // Cập nhật pagination với cấu trúc mới
+        // Cập nhật pagination từ response
         if (res.data.pagination) {
           setPagination(res.data.pagination);
-          // setCurrentPage(pagination.page); // Dòng này có thể gây lỗi, xem lưu ý
         }
       }
     } catch (error) {
+      // Log lỗi để debug - có thể thay bằng toast notification
       console.error("Error fetching rooms:", error);
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Effect: Fetch rooms khi filter/pagination thay đổi
   useEffect(() => {
     fetchRooms();
   }, [debounceSearchValue, selectedCity, selectedWard, capacity, currentPage]);
 
+  // Effect: Fetch danh sách thành phố khi component mount
   useEffect(() => {
     fetchCity();
   }, []);
 
+  /**
+   * Fetch danh sách thành phố từ API
+   */
   const fetchCity = async () => {
-    let res = await getCity();
+    const res = await getCity();
     setListCitys(res);
   };
 
+  /**
+   * Fetch danh sách quận/huyện theo ID thành phố
+   * @param {string} provide_id - ID của thành phố
+   */
   const fetchWard = async (provide_id) => {
-    let res = await getWard(provide_id);
+    const res = await getWard(provide_id);
     setListWards(res);
   };
 
+  // ==================================================================================
+  // EVENT HANDLERS
+  // ==================================================================================
+
+  /**
+   * Xử lý khi chọn thành phố - reset quận/huyện và load danh sách mới
+   */
   const handleSelectedCity = (value) => {
     fetchWard(value.id);
     setSelectedCity(value);

@@ -67,15 +67,19 @@ class ContractCreate(ContractBase):
     - Giá điện, giá nước
     - Điều khoản
     - Phí dịch vụ (array)
+    - Số điện ban đầu (initial_electricity_index)
     """
     
     contract_number: Optional[str] = Field(default=None, description="Mã hợp đồng (tự sinh nếu không nhập)")
-    status: Optional[str] = Field(default="ACTIVE", description="Trạng thái hợp đồng: ACTIVE (mặc định), PENDING (chờ kích hoạt)")
+    status: Optional[str] = Field(default="PENDING", description="Trạng thái hợp đồng: PENDING (mặc định - chờ ký), ACTIVE (hoạt động)")
     
     # Thông tin thanh toán chi tiết
     payment_cycle_months: Optional[int] = Field(default=1, ge=1, le=12, description="Chu kỳ thanh toán (tháng)")
     electricity_price: Optional[Decimal] = Field(default=0, ge=0, description="Giá điện (VNĐ/kWh)")
     water_price: Optional[Decimal] = Field(default=0, ge=0, description="Giá nước (VNĐ/m³)")
+    
+    # Chỉ số điện ban đầu khi ký hợp đồng - dùng để tính toán hóa đơn tháng đầu tiên
+    initial_electricity_index: Optional[float] = Field(default=0, ge=0, description="Số điện ban đầu lúc ký hợp đồng (kWh)")
     
     # Phí dịch vứ (Internet, Parking, Vệ sinh, Thang máy, ...)
     service_fees: Optional[list[ServiceFeeItem]] = Field(
@@ -98,6 +102,7 @@ class ContractUpdate(BaseModel):
     number_of_tenants: Optional[int] = Field(default=None, ge=1)
     status: Optional[str] = Field(default=None, description="Trạng thái hợp đồng")
     terms_and_conditions: Optional[str] = None
+    initial_electricity_index: Optional[float] = Field(default=None, ge=0, description="Số điện ban đầu lúc ký hợp đồng")
     notes: Optional[str] = None
     
     payment_cycle_months: Optional[int] = Field(default=None, ge=1, le=12)
@@ -168,6 +173,9 @@ class ContractOut(BaseModel):
     electricity_price: Optional[Decimal] = None
     water_price: Optional[Decimal] = None
     service_fees: Optional[list[ServiceFeeItem]] = Field(default_factory=list)
+    
+    # Chỉ số điện ban đầu khi ký hợp đồng
+    initial_electricity_index: Optional[float] = None
     
     # Metadata
     created_by: Optional[UUID]

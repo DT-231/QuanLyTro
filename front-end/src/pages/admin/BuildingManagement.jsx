@@ -54,6 +54,7 @@ const BuildingManagement = () => {
   const [detailBuildingData, setDetailBuildingData] = useState(null);
   const [buildingToDelete, setBuildingToDelete] = useState(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [deleteModalType, setDeleteModalType] = useState("confirm"); // "confirm" | "warning" | "blocked"
 
   // --- API HANDLERS (Server-side filtering & pagination) ---
   const fetchBuildings = useCallback(async () => {
@@ -305,6 +306,21 @@ const BuildingManagement = () => {
 
   const handleDeleteClick = (building) => {
     setBuildingToDelete(building);
+    
+    const rentedRooms = building.rented_rooms || 0;
+    const totalRooms = building.total_rooms || 0;
+    
+    if (rentedRooms > 0) {
+      // Có phòng đang cho thuê → chặn xóa
+      setDeleteModalType("blocked");
+    } else if (totalRooms > 0) {
+      // Có phòng nhưng không cho thuê → cảnh báo sẽ xóa cả phòng
+      setDeleteModalType("warning");
+    } else {
+      // Không có phòng → xác nhận xóa bình thường
+      setDeleteModalType("confirm");
+    }
+    
     setDeleteModalOpen(true);
   };
 
@@ -557,10 +573,30 @@ const BuildingManagement = () => {
       
       <DeleteConfirmationModal
         isOpen={deleteModalOpen}
-        onClose={() => setDeleteModalOpen(false)}
-        onConfirm={confirmDelete}
+        onClose={() => {
+          setDeleteModalOpen(false);
+          setBuildingToDelete(null);
+        }}
+        onConfirm={deleteModalType !== "blocked" ? confirmDelete : null}
         itemName={buildingToDelete?.building_name}
-        itemType="Tòa nhà"
+        title={
+          deleteModalType === "blocked" 
+            ? "Không thể xóa tòa nhà" 
+            : deleteModalType === "warning"
+            ? "Cảnh báo"
+            : "Xác nhận xóa"
+        }
+        message={
+          deleteModalType === "blocked" 
+            ? "Không thể xóa tòa nhà vì đang có phòng đang cho thuê. Vui lòng kết thúc hợp đồng các phòng trước khi thực hiện thao tác này."
+            : deleteModalType === "warning"
+            ? `Tòa nhà "${buildingToDelete?.building_name}" có ${buildingToDelete?.total_rooms} phòng. Toà nhà và toàn bộ phòng thuộc toà sẽ bị xoá. Bạn có chắc chắn muốn tiếp tục?`
+            : null
+        }
+        confirmText={deleteModalType === "warning" ? "Xác nhận xóa" : "Xóa"}
+        cancelText={deleteModalType === "blocked" ? "Đóng" : "Hủy"}
+        showConfirmButton={deleteModalType !== "blocked"}
+        variant={deleteModalType === "warning" ? "warning" : "danger"}
       />
     </div>
   );

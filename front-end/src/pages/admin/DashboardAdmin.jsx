@@ -1,3 +1,14 @@
+/**
+ * Dashboard Admin - Trang tổng quan dành cho Admin
+ *
+ * Hiển thị:
+ * - Thống kê doanh thu, số phòng, phòng trống, sự cố
+ * - Filter theo tòa nhà và khoảng thời gian
+ * - Hoạt động gần đây (mock data)
+ * - Lịch hẹn xem phòng (mock data)
+ *
+ * TODO: Kết nối API thật cho activities và appointments
+ */
 import React, { useState, useEffect, useMemo } from "react";
 import { 
   FaDollarSign, 
@@ -13,45 +24,47 @@ import {
 } from "react-icons/fa";
 import { FiChevronDown, FiCalendar } from "react-icons/fi";
 
-// --- 1. IMPORT SERVICE (Lấy dữ liệu thật) ---
+// Services - API calls
 import { roomService } from "@/services/roomService"; 
-import { buildingService } from "@/services/buildingService"; // SỬA: Import thêm buildingService
+import { buildingService } from "@/services/buildingService";
 
 const Dashboard = () => {
   // ==================================================================================
-  // 1. STATE QUẢN LÝ DỮ LIỆU
+  // STATE MANAGEMENT
   // ==================================================================================
   
+  // Data từ API
   const [rooms, setRooms] = useState([]); 
-  const [buildings, setBuildings] = useState([]); // SỬA: State lưu danh sách tòa nhà
+  const [buildings, setBuildings] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // SỬA: State lọc theo TÊN tòa nhà (Khớp logic trang Quản lý phòng)
+  // Filter states
   const [selectedBuildingName, setSelectedBuildingName] = useState("Tất cả toà nhà");
   const [isBuildingMenuOpen, setIsBuildingMenuOpen] = useState(false);
 
-  // Dữ liệu Sự cố (Mock)
-  const [issues, setIssues] = useState([
+  // Dữ liệu Sự cố - TODO: Thay bằng API thật từ MaintenanceService
+  const [issues] = useState([
     { id: 101, status: "Chưa xử lý" },
     { id: 110, status: "Đã xử lý" },
     { id: 430, status: "Đang xử lý" },
     { id: 603, status: "Chưa xử lý" }, 
   ]);
 
-  // State dropdown tháng
+  // State dropdown tháng - TODO: Implement filter theo tháng
   const [isMonthOpen, setIsMonthOpen] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState("Tháng 10");
   const months = ["Tháng 1", "Tháng 2", "Tháng 3", "Tháng 4", "Tháng 5", "Tháng 6", "Tháng 7", "Tháng 8", "Tháng 9", "Tháng 10", "Tháng 11", "Tháng 12"];
 
   // ==================================================================================
-  // 2. FETCH DATA TỪ API
+  // DATA FETCHING
   // ==================================================================================
+  
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
         setLoading(true);
         
-        // SỬA: Gọi song song API Room và Building
+        // Gọi song song API Room và Building để tăng performance
         const [roomRes, buildRes] = await Promise.all([
           roomService.getAll(),
           buildingService.getAll()
@@ -61,6 +74,7 @@ const Dashboard = () => {
         if (buildRes?.data?.items) setBuildings(buildRes.data.items);
 
       } catch (error) {
+        // TODO: Hiển thị toast error cho user
         console.error("Lỗi tải dữ liệu Dashboard:", error);
       } finally {
         setLoading(false);
@@ -71,27 +85,43 @@ const Dashboard = () => {
   }, []);
 
   // ==================================================================================
-  // 3. LOGIC LỌC & TÍNH TOÁN (ĐÃ SỬA LỖI HIỂN THỊ SỐ 0)
+  // COMPUTED VALUES (useMemo cho performance)
   // ==================================================================================
 
-  // Bước 1: Lọc danh sách phòng theo TÊN TÒA NHÀ
+  /**
+   * Lọc danh sách phòng theo tòa nhà được chọn
+   */
   const filteredRooms = useMemo(() => {
     if (selectedBuildingName === "Tất cả toà nhà") return rooms;
     return rooms.filter(r => r.building_name === selectedBuildingName);
   }, [rooms, selectedBuildingName]);
+
+  /**
+   * Tính toán thống kê từ danh sách phòng đã lọc
+   * - revenue: Tổng doanh thu từ phòng đang thuê
+   * - totalRooms: Tổng số phòng
+   * - emptyRooms: Số phòng trống
+   * - totalIssues: Số sự cố
+   */
   const stats = useMemo(() => {
     const totalRooms = filteredRooms.length;
+    
+    // Đếm phòng trống (hỗ trợ nhiều format status)
     const emptyRooms = filteredRooms.filter(r => 
       r.status === "AVAILABLE" || r.status === "Trống" || r.status === "Còn trống"
     ).length;
 
     const totalIssues = issues.length;
+    
+    // Lọc phòng đang thuê để tính doanh thu
     const occupiedRooms = filteredRooms.filter(r => 
       r.status === "OCCUPIED" || r.status === "Đang thuê" || r.status === "Đã thuê"
     );
 
+    // Tính tổng doanh thu từ giá thuê các phòng đang có người ở
     const revenue = occupiedRooms.reduce((sum, room) => {
       let price = room.base_price || 0;
+      // Handle trường hợp price là string
       if (typeof price === 'string') {
          price = parseFloat(price.replace(/[^0-9.-]+/g,"")); 
       }
@@ -100,10 +130,10 @@ const Dashboard = () => {
 
     return {
       revenue,
-      revenueTrend: 12.5, 
+      revenueTrend: 12.5, // TODO: Tính từ dữ liệu tháng trước
       totalRooms,
       emptyRooms,
-      emptyTrend: -5,
+      emptyTrend: -5, // TODO: Tính từ dữ liệu tháng trước
       totalIssues,
       expiringContracts: 0, 
       unregisteredTemp: 0,

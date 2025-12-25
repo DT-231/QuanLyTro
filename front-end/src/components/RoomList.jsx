@@ -1,3 +1,12 @@
+/**
+ * RoomList - Component hiển thị danh sách phòng dạng grid
+ *
+ * @deprecated Component này có thể không còn được sử dụng.
+ * HomePage đã chuyển sang render inline.
+ * Giữ lại để tham khảo hoặc tái sử dụng.
+ *
+ * @param {Array} rooms - Danh sách phòng từ API
+ */
 const RoomList = ({ rooms }) => {
   return (
     <div className="mt-8">
@@ -8,16 +17,15 @@ const RoomList = ({ rooms }) => {
           <div
             key={room.id}
             className="flex w-full max-w-[580px] h-auto bg-white rounded-lg p-2.5 gap-2.5 shadow-md border border-gray-100 cursor-pointer hover:shadow-xl transition-shadow duration-300"
-            // onClick={() => onSelectRoom(room)}
           >
-            {/* Phần hình ảnh */}
+            {/* Hình ảnh phòng */}
             <img
               src={room.image}
               alt={room.name}
               className="w-[200px] h-full object-cover rounded-md flex-none self-stretch"
             />
 
-            {/* Phần thông tin chi tiết */}
+            {/* Thông tin phòng */}
             <div className="flex flex-col justify-between flex-grow self-stretch py-2.5">
               <div className="flex flex-col gap-2.5">
                 <h3 className="h-auto md:h-12 font-semibold text-lg leading-[22px] tracking-wide text-black">

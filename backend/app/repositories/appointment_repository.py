@@ -130,3 +130,38 @@ class AppointmentRepository:
 
         result = self.session.execute(stmt)
         return len(list(result.scalars().all()))
+
+    def get_by_contact(
+        self, email: Optional[str] = None, phone: Optional[str] = None
+    ) -> List[Appointment]:
+        """Lấy danh sách appointments theo email hoặc phone.
+        
+        Args:
+            email: Email người đặt lịch
+            phone: Số điện thoại người đặt lịch
+            
+        Returns:
+            List appointments khớp với email hoặc phone
+        """
+        stmt = (
+            select(Appointment)
+            .options(
+                selectinload(Appointment.room)
+                .selectinload(Room.building)
+                .selectinload(Building.address)
+            )
+            .order_by(Appointment.created_at.desc())
+        )
+
+        # Filter theo email hoặc phone
+        conditions = []
+        if email:
+            conditions.append(Appointment.email == email)
+        if phone:
+            conditions.append(Appointment.phone == phone)
+
+        if conditions:
+            stmt = stmt.where(or_(*conditions))
+
+        result = self.session.execute(stmt)
+        return list(result.scalars().all())

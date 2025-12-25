@@ -153,15 +153,23 @@ class RoomUpdate(BaseModel):
     status: Optional[str] = None
     description: Optional[str] = None
 
-    # Update utilities, photos và service fees
+    # Update utilities và service fees
     utilities: Optional[List[str]] = Field(
         None, description="Danh sách tiện ích (replace toàn bộ)"
     )
-    photo_urls: Optional[List[str]] = Field(
-        None, description="Danh sách URL ảnh (replace toàn bộ)"
-    )
     default_service_fees: Optional[List[RoomServiceFeeItem]] = Field(
         None, description="Phí dịch vụ mặc định (replace toàn bộ)"
+    )
+    
+    # Photo management - hỗ trợ giữ ảnh cũ + thêm ảnh mới
+    photo_urls: Optional[List[str]] = Field(
+        None, description="[DEPRECATED] Danh sách URL ảnh (replace toàn bộ)"
+    )
+    keep_photo_ids: Optional[List[uuid.UUID]] = Field(
+        None, description="Danh sách ID ảnh cũ cần giữ lại"
+    )
+    new_photos: Optional[List[RoomPhotoInput]] = Field(
+        None, description="Danh sách ảnh mới dạng base64: [{'image_base64': 'data:image/...', 'is_primary': false}]"
     )
     
     @model_validator(mode='before')
@@ -186,6 +194,29 @@ class RoomUpdate(BaseModel):
         if v is not None:
             return [url.strip() for url in v if url.strip()]
         return None
+    
+    @validator("new_photos")
+    def validate_new_photos(cls, v):
+        """Validate danh sách ảnh mới."""
+        if not v:
+            return None
+        
+        validated = []
+        for idx, photo in enumerate(v):
+            if isinstance(photo, dict):
+                image_base64 = photo.get("image_base64")
+                if image_base64:
+                    validated.append(
+                        RoomPhotoInput(
+                            image_base64=image_base64,
+                            is_primary=photo.get("is_primary", False),
+                            sort_order=photo.get("sort_order", idx),
+                        )
+                    )
+            elif isinstance(photo, RoomPhotoInput):
+                validated.append(photo)
+        
+        return validated if validated else None
 
     model_config = {"from_attributes": True}
 
@@ -259,7 +290,7 @@ class RoomListItem(BaseModel):
 class RoomPublicListItem(BaseModel):
     """Schema for Room list item - Public view (khách thuê/khách vãng lai).
 
-    Chỉ hiển thị thông tin cần thiết: ảnh đại diện, giá, địa chỉ, trạng thái trống.
+    Hiển thị thông tin cần thiết: ảnh đại diện, giá, địa chỉ, trạng thái trống.
     Sắp xếp theo thời gian tạo (mới nhất trước).
     """
 
@@ -274,7 +305,8 @@ class RoomPublicListItem(BaseModel):
     base_price: Decimal
     area: Optional[float] = None
     capacity: int
-    is_available: bool = Field(..., description="Phòng còn trống không")
+    current_occupants: int = Field(0, description="Số người đang ở trong phòng")
+    is_available: bool = Field(..., description="Phòng còn trống không (chưa full)")
     primary_photo: Optional[str] = Field(
         None, description="Ảnh đại diện (URL hoặc base64)"
     )
@@ -316,6 +348,11 @@ class RoomPublicDetail(BaseModel):
     utilities: List[str] = Field(default_factory=list, description="Danh sách tiện ích")
     photos: List[RoomPhotoOut] = Field(
         default_factory=list, description="Tất cả ảnh của phòng"
+    )
+    
+    # Phí dịch vụ mặc định
+    default_service_fees: List[RoomServiceFeeItem] = Field(
+        default_factory=list, description="Phí dịch vụ mặc định của phòng"
     )
 
     model_config = {"from_attributes": True, "json_encoders": {Decimal: str}}

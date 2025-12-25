@@ -11,7 +11,10 @@ from sqlalchemy.orm import Session
 
 from app.repositories.building_repository import BuildingRepository
 from app.repositories.address_respository import AddressRepository
+from app.repositories.room_repository import RoomRepository
 from app.schemas.address_schema import AddressCreate
+from app.models.contract import Contract
+from app.core.Enum.contractEnum import ContractStatus
 from app.schemas.building_schema import (
     BuildingCreate,
     BuildingUpdate,
@@ -36,6 +39,7 @@ class BuildingService:
         self.db = db
         self.building_repo = BuildingRepository(db)
         self.address_repo = AddressRepository(db)
+        self.room_repo = RoomRepository(db)
 
     def create_building(self, building_data: BuildingCreate) -> BuildingOut:
         """Tạo tòa nhà mới với validation.
@@ -300,25 +304,75 @@ class BuildingService:
         # Convert ORM model sang Pydantic schema
         return BuildingOut.model_validate(updated)
 
-    def delete_building(self, building_id: UUID) -> None:
-        """Xóa tòa nhà.
+    def delete_building(self, building_id: UUID) -> dict:
+        """Xóa tòa nhà theo logic nghiệp vụ.
 
         Business rules:
-        - Không xóa tòa nhà đang có phòng (cần check sau).
+        1. Nếu có phòng có hợp đồng ACTIVE/PENDING → không cho phép xóa
+        2. Nếu không có hợp đồng và có phòng → xóa cả phòng và tòa nhà
+        3. Nếu không có phòng → chỉ xóa tòa nhà
 
         Args:
             building_id: UUID của tòa nhà cần xóa.
 
+        Returns:
+            dict: Thông tin về kết quả xóa gồm building_id, rooms_deleted, message
+
         Raises:
-            ValueError: Nếu không tìm thấy tòa nhà hoặc đang có phòng.
+            ValueError: Nếu không tìm thấy tòa nhà hoặc đang có phòng cho thuê.
         """
-        # Lấy ORM instance để xóa
-        building_orm = self.building_repo.get_by_id(building_id)
-        if not building_orm:
+        # Lấy building kèm thống kê phòng
+        building_data = self.building_repo.get_by_id_with_stats(building_id)
+        if not building_data:
             raise ValueError(f"Không tìm thấy tòa nhà với ID: {building_id}")
 
-        # TODO: Kiểm tra tòa nhà có phòng không
-        # if building_orm.rooms:
-        #     raise ValueError("Không thể xóa tòa nhà đang có phòng")
+        total_rooms = building_data.get("total_rooms", 0)
+        rented_rooms = building_data.get("rented_rooms", 0)
 
+        # Kiểm tra nếu có phòng đang cho thuê (theo thống kê)
+        if rented_rooms > 0:
+            raise ValueError(
+                "Không thể xoá tòa nhà vì đang có phòng đang cho thuê. "
+                "Vui lòng kết thúc hợp đồng các phòng trước khi thực hiện thao tác này."
+            )
+
+        # Lấy ORM instance để xóa
+        building_orm = self.building_repo.get_by_id(building_id)
+
+        # Xóa tất cả phòng thuộc tòa nhà trước (nếu có)
+        rooms_deleted = 0
+        if total_rooms > 0:
+            # Lấy danh sách phòng của tòa nhà
+            rooms = self.room_repo.list(building_id=building_id, limit=1000)
+            
+            # Kiểm tra hợp đồng ACTIVE/PENDING cho từng phòng
+            active_statuses = [ContractStatus.ACTIVE.value, ContractStatus.PENDING.value]
+            for room in rooms:
+                active_contracts = (
+                    self.db.query(Contract)
+                    .filter(
+                        Contract.room_id == room.id,
+                        Contract.status.in_(active_statuses)
+                    )
+                    .count()
+                )
+                if active_contracts > 0:
+                    raise ValueError(
+                        f"Không thể xoá tòa nhà vì phòng {room.room_number} đang có hợp đồng. "
+                        "Vui lòng kết thúc hoặc huỷ hợp đồng trước khi thực hiện thao tác này."
+                    )
+            
+            # Xóa tất cả phòng (cascade sẽ xóa utilities, photos, appointments, etc.)
+            for room in rooms:
+                self.room_repo.delete(room)
+            rooms_deleted = len(rooms)
+
+        # Xóa tòa nhà
         self.building_repo.delete(building_orm)
+
+        return {
+            "building_id": str(building_id),
+            "total_rooms": total_rooms,
+            "rooms_deleted": rooms_deleted,
+            # "message": f"Đã xóa tòa nhà và {rooms_deleted} phòng thành công" if rooms_deleted > 0 else "Đã xóa tòa nhà thành công"
+        }

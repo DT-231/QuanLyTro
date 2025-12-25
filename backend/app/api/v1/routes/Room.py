@@ -433,7 +433,7 @@ def update_room(
     room_id: UUID,
     room_data: RoomUpdate,
     db: Session = Depends(get_db),
-    # current_user: User = Depends(get_current_user)  # TODO: Uncomment khi có auth
+    current_user: User = Depends(get_current_user)  # TODO: Uncomment khi có auth
 ):
     """Cập nhật thông tin phòng với đầy đủ thông tin.
 
@@ -463,8 +463,9 @@ def update_room(
     """
     try:
         room_service = RoomService(db)
-        # TODO: Thay None bằng current_user.id khi có auth
-        room = room_service.update_room(room_id, room_data, user_id=None)
+        user_id = current_user.id if current_user.id else None
+
+        room = room_service.update_room(room_id, room_data, user_id=user_id)
         return response.success(data=room, message="Cập nhật phòng thành công")
     except ValueError as e:
         # Có thể là not found hoặc business rule violation
@@ -582,8 +583,8 @@ def search_rooms(
     capacity: Optional[int] = Query(None, ge=1, description="Sức chứa tối thiểu"),
     room_status: Optional[str] = Query(None, description="Trạng thái phòng", alias="status"),
     utilities: Optional[str] = Query(None, description="Tiện ích (cách nhau bởi dấu phẩy: 'Điều hoà,Bếp,TV')"),
-    offset: int = Query(0, ge=0, description="Vị trí bắt đầu"),
-    limit: int = Query(20, ge=1, le=100, description="Số lượng tối đa (max 100)"),
+    page: int = Query(1, ge=1, description="Số trang (bắt đầu từ 1)"),
+    pageSize: int = Query(20, ge=1, le=100, description="Số lượng mỗi trang (max 100)"),
     db: Session = Depends(get_db),
     # KHÔNG có current_user = Depends(get_current_user) - API công khai
 ):
@@ -598,18 +599,21 @@ def search_rooms(
     - capacity: Sức chứa tối thiểu (optional)
     - status: Trạng thái phòng (AVAILABLE, OCCUPIED, MAINTENANCE, RESERVED)
     - utilities: Danh sách tiện ích cần có, cách nhau bởi dấu phẩy (ví dụ: "Điều hoà,Bếp,TV")
-    - offset: Vị trí bắt đầu (default 0)
-    - limit: Số lượng tối đa (default 20, max 100)
+    - page: Số trang (default 1)
+    - pageSize: Số lượng mỗi trang (default 20, max 100)
 
     Returns:
         {
-            "code": 200,
+            "success": true,
             "message": "success",
             "data": {
                 "items": [...],
-                "total": 15,
-                "offset": 0,
-                "limit": 20
+                "pagination": {
+                    "totalItems": 15,
+                    "page": 1,
+                    "pageSize": 20,
+                    "totalPages": 1
+                }
             }
         }
     """
@@ -629,8 +633,8 @@ def search_rooms(
             capacity=capacity,
             status=room_status,
             utilities=utilities_list,
-            offset=offset,
-            limit=limit,
+            page=page,
+            pageSize=pageSize,
         )
         return response.success(data=result, message="Tìm kiếm phòng thành công")
     except ValueError as e:

@@ -1,15 +1,30 @@
+/**
+ * Router Configuration - Cấu hình routing cho ứng dụng
+ *
+ * Cấu trúc routes:
+ * - PUBLIC: Trang công khai (HomePage, Login, Register, Room Detail)
+ * - MEMBER: Trang cho user đã đăng nhập (Profile, Contracts, Invoices)
+ * - ADMIN: Trang quản trị (Dashboard, Users, Buildings, Rooms, etc.)
+ *
+ * Sử dụng ProtectedRoute để kiểm tra quyền truy cập
+ */
 import { createBrowserRouter, Outlet } from "react-router-dom";
 import App from "./App";
 import ProtectedRoute from "./components/ProtectedRoute";
 
-// ================== Public Pages ==================
+// ==================================================================================
+// PUBLIC PAGES - Trang công khai, không cần đăng nhập
+// ==================================================================================
 import HomePage from "./pages/public/HomePage";
 import LoginPage from "./pages/public/LoginPage";
 import RegisterPage from "./pages/public/RegisterPage";
 import ForgotPasswordPage from "./pages/public/ForgotPasswordPage";
 import RoomDetailPage from "./pages/public/Room/RoomDetailPage";
+import MyAppointmentsPage from "./pages/public/MyAppointmentsPage";
 
-// ================== Admin Pages ==================
+// ==================================================================================
+// ADMIN PAGES - Trang quản trị, yêu cầu role ADMIN
+// ==================================================================================
 import DashboardAdmin from "./pages/admin/DashboardAdmin";
 import AccountManagement from "./pages/admin/AccountManagement";
 import InvoiceManagement from "./pages/admin/Invoice/InvoiceManagement";
@@ -18,12 +33,12 @@ import RoomManagement from "./pages/admin/RoomManagement";
 import ContractManagement from "./pages/admin/ContractManagement";
 import ContractDetailPageAdmin from "./pages/admin/ContractDetailPage";
 import IssueManagement from "./pages/admin/IssueManagement";
-
 import InvoiceDetailPage from "./pages/admin/Invoice/InvoiceDetailPage";
-
 import AppointmentManagementPage from "./pages/admin/AppointmentManagementPage";
 
-// ================== Member Pages ==================
+// ==================================================================================
+// MEMBER PAGES - Trang cho user đã đăng nhập (TENANT, CUSTOMER)
+// ==================================================================================
 import ProfilePage from "./pages/member/ProfilePage";
 import ContractListPage from "./pages/member/contract/ContractListPage";
 import IssueReport from "./pages/member/IssueReport";
@@ -32,28 +47,35 @@ import MyInvoiceDetailPage from "./pages/member/invoice/MyInvoiceDetailPage";
 import ContractDetailPage from "./pages/member/contract/ContractDetailPage";
 import MyAppointmentPage from "./pages/member/MyAppointmentPage";
 
-// ================== Account Pages ==================
+// Account Settings
 import AccountProfile from "./pages/member/account/AccountProfile";
 import AccountChangePassword from "./pages/member/account/AccountChangePassword";
 import AccountChangePhone from "./pages/member/account/AccountChangePhone";
+
+// ==================================================================================
+// ROUTER CONFIGURATION
+// ==================================================================================
 
 const router = createBrowserRouter([
   {
     path: "/",
     element: <App />,
+    // Error boundary cho 404 và các lỗi khác
     errorElement: (
       <div className="p-20 text-center text-red-500 font-bold text-2xl">
         404 - Trang không tồn tại
       </div>
     ),
     children: [
-      // ================== PUBLIC ROUTES ==================
+      // --- PUBLIC ROUTES: Không cần đăng nhập ---
       { index: true, element: <HomePage /> },
       { path: "login", element: <LoginPage /> },
       { path: "register", element: <RegisterPage /> },
       { path: "forgot-password", element: <ForgotPasswordPage /> },
       { path: "/room/:id", element: <RoomDetailPage /> },
-      // ================== MEMBER ROUTES ==================
+      { path: "my-appointments", element: <MyAppointmentsPage /> },
+      
+      // --- MEMBER ROUTES: Yêu cầu đăng nhập (TENANT, CUSTOMER) ---
       {
         path: "member",
         element: (
@@ -70,15 +92,14 @@ const router = createBrowserRouter([
           { path: "my-invoices/:id", element: <MyInvoiceDetailPage /> },
           { path: "my-appointments", element: <MyAppointmentPage /> },
           { path: "incidents", element: <IssueReport /> },
+          // Account settings
           { path: "account/profile", element: <AccountProfile /> },
-          {
-            path: "account/change-password",
-            element: <AccountChangePassword />,
-          },
+          { path: "account/change-password", element: <AccountChangePassword /> },
           { path: "account/change-phone", element: <AccountChangePhone /> },
         ],
       },
-      // ================== ADMIN ROUTES ==================
+      
+      // --- ADMIN ROUTES: Yêu cầu role ADMIN ---
       {
         path: "admin",
         element: (

@@ -27,28 +27,32 @@ router = APIRouter(prefix="/notifications", tags=["Notification Management"])
     
     **Filters:**
     - is_read: Lọc theo trạng thái đọc (true/false)
-    - skip: Số bản ghi bỏ qua
-    - limit: Số bản ghi tối đa
+    - page: Số trang
+    - pageSize: Số bản ghi mỗi trang
     """
 )
 async def get_notifications(
-    skip: int = Query(0, ge=0, description="Số bản ghi bỏ qua"),
-    limit: int = Query(50, ge=1, le=100, description="Số bản ghi tối đa"),
+    page: int = Query(1, ge=1, description="Số trang"),
+    pageSize: int = Query(20, ge=1, le=100, description="Số bản ghi mỗi trang"),
     is_read: Optional[bool] = Query(None, description="Lọc theo trạng thái đọc"),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db)
 ):
     """Lấy danh sách thông báo của user."""
     try:
+        offset = (page - 1) * pageSize
+        
         service = NotificationService(session)
         notifications = await service.get_user_notifications(
             user_id=current_user.id,
-            skip=skip,
-            limit=limit,
+            skip=offset,
+            limit=pageSize,
             is_read=is_read
         )
         
         unread_count = await service.get_unread_count(current_user.id)
+        totalItems = await service.count_user_notifications(current_user.id, is_read=is_read)
+        totalPages = (totalItems + pageSize - 1) // pageSize if totalItems > 0 else 1
         
         # Convert to dict
         notification_list = [
@@ -70,10 +74,13 @@ async def get_notifications(
         return response.success(
             data={
                 "items": notification_list,
-                "total": len(notification_list),
                 "unread_count": unread_count,
-                "skip": skip,
-                "limit": limit
+                "pagination": {
+                    "totalItems": totalItems,
+                    "page": page,
+                    "pageSize": pageSize,
+                    "totalPages": totalPages,
+                }
             },
             message="Lấy danh sách thông báo thành công"
         )

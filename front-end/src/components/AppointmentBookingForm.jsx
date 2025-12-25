@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Calendar,
   Clock,
@@ -22,11 +22,14 @@ import {
 } from "@/components/ui/dialog";
 import { bookAppointment } from "@/services/appointmentService";
 import { toast } from "sonner";
+import { useAuth } from "@/context/AuthContext";
 
 /**
  * AppointmentBookingForm - Form đặt lịch xem phòng
  *
- * Component này hiển thị form để người dùng (chưa đăng nhập) đặt lịch xem phòng
+ * Component này hiển thị form để người dùng đặt lịch xem phòng.
+ * Nếu đã đăng nhập, tự động điền thông tin từ tài khoản.
+ * Email là bắt buộc để nhận thông báo về lịch hẹn.
  *
  * @param {Object} props
  * @param {string} props.roomId - ID của phòng cần đặt lịch
@@ -38,6 +41,9 @@ export default function AppointmentBookingForm({
   roomNumber,
   buildingName,
 }) {
+  // Lấy thông tin user từ context auth
+  const { user, isAuthenticated } = useAuth();
+  
   const [isOpen, setIsOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -50,6 +56,18 @@ export default function AppointmentBookingForm({
     appointment_time: "",
     notes: "",
   });
+
+  // Pre-fill form khi đã đăng nhập
+  useEffect(() => {
+    if (isAuthenticated && user && isOpen) {
+      setFormData((prev) => ({
+        ...prev,
+        full_name: user.full_name || `${user.first_name || ""} ${user.last_name || ""}`.trim() || prev.full_name,
+        phone: user.phone || prev.phone,
+        email: user.email || prev.email,
+      }));
+    }
+  }, [isAuthenticated, user, isOpen]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -64,14 +82,22 @@ export default function AppointmentBookingForm({
     setIsSubmitting(true);
 
     try {
-      // Validate
+      // Validate - Email bắt buộc thay vì SĐT
       if (
         !formData.full_name ||
-        !formData.phone ||
+        !formData.email ||
         !formData.appointment_date ||
         !formData.appointment_time
       ) {
-        toast.error("Vui lòng điền đầy đủ thông tin bắt buộc.");
+        toast.error("Vui lòng điền đầy đủ thông tin bắt buộc (họ tên, email, ngày giờ).");
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(formData.email)) {
+        toast.error("Email không hợp lệ.");
         setIsSubmitting(false);
         return;
       }
@@ -85,8 +111,8 @@ export default function AppointmentBookingForm({
       const data = await bookAppointment({
         room_id: roomId,
         full_name: formData.full_name,
-        phone: formData.phone,
-        email: formData.email || null,
+        phone: formData.phone || null,  // Phone không bắt buộc
+        email: formData.email,  // Email bắt buộc
         appointment_datetime: appointmentDatetime.toISOString(),
         notes: formData.notes || null,
       });
@@ -140,8 +166,8 @@ export default function AppointmentBookingForm({
           <DialogDescription className="text-base">
             Phòng {roomNumber} - {buildingName}
             <br />
-            Người xem phòng cần cung cấp họ tên, số điện thoại, thời gian mong
-            muốn và phòng muốn xem.
+            Vui lòng cung cấp họ tên, email và thời gian bạn muốn xem phòng.
+            {isAuthenticated && <span className="text-green-600 font-medium"> (Thông tin đã được điền tự động)</span>}
           </DialogDescription>
         </DialogHeader>
 
@@ -154,7 +180,7 @@ export default function AppointmentBookingForm({
             <p className="text-center text-gray-600">
               Chúng tôi đã nhận được yêu cầu của bạn.
               <br />
-              Chúng tôi sẽ liên hệ với bạn trong thời gian sớm nhất.
+              Chúng tôi sẽ liên hệ qua email trong thời gian sớm nhất.
             </p>
           </div>
         ) : (
@@ -176,30 +202,11 @@ export default function AppointmentBookingForm({
               />
             </div>
 
-            {/* Số điện thoại */}
-            <div className="space-y-2">
-              <Label htmlFor="phone" className="flex items-center">
-                <Phone className="mr-2 h-4 w-4" />
-                Số điện thoại <span className="text-red-500 ml-1">*</span>
-              </Label>
-              <Input
-                id="phone"
-                name="phone"
-                type="tel"
-                placeholder="0912345678"
-                value={formData.phone}
-                onChange={handleChange}
-                required
-                pattern="[0-9]{10,11}"
-                className="w-full"
-              />
-            </div>
-
-            {/* Email */}
+            {/* Email - BẮT BUỘC */}
             <div className="space-y-2">
               <Label htmlFor="email" className="flex items-center">
                 <Mail className="mr-2 h-4 w-4" />
-                Email (không bắt buộc)
+                Email <span className="text-red-500 ml-1">*</span>
               </Label>
               <Input
                 id="email"
@@ -208,6 +215,28 @@ export default function AppointmentBookingForm({
                 placeholder="example@email.com"
                 value={formData.email}
                 onChange={handleChange}
+                required
+                className="w-full"
+              />
+              <p className="text-xs text-gray-500">
+                Chúng tôi sẽ gửi xác nhận và thông báo qua email này.
+              </p>
+            </div>
+
+            {/* Số điện thoại - KHÔNG bắt buộc */}
+            <div className="space-y-2">
+              <Label htmlFor="phone" className="flex items-center">
+                <Phone className="mr-2 h-4 w-4" />
+                Số điện thoại (không bắt buộc)
+              </Label>
+              <Input
+                id="phone"
+                name="phone"
+                type="tel"
+                placeholder="0912345678"
+                value={formData.phone}
+                onChange={handleChange}
+                pattern="[0-9]{10,11}"
                 className="w-full"
               />
             </div>

@@ -85,8 +85,8 @@ def create_appointment(
     """,
 )
 def get_appointments(
-    skip: int = Query(0, ge=0, description="Số bản ghi bỏ qua"),
-    limit: int = Query(100, ge=1, le=1000, description="Số bản ghi tối đa"),
+    page: int = Query(1, ge=1, description="Số trang (bắt đầu từ 1)"),
+    pageSize: int = Query(20, ge=1, le=100, description="Số bản ghi mỗi trang"),
     status: Optional[str] = Query(None, description="Lọc theo trạng thái"),
     room_id: Optional[UUID] = Query(None, description="Lọc theo phòng"),
     from_date: Optional[datetime] = Query(None, description="Từ ngày"),
@@ -102,17 +102,21 @@ def get_appointments(
                 message="Chỉ admin mới có quyền xem danh sách appointments",
             )
 
+        # Convert page/pageSize to offset/limit
+        offset = (page - 1) * pageSize
+
         service = AppointmentService(session)
         appointments = service.get_appointments(
-            skip=skip,
-            limit=limit,
+            skip=offset,
+            limit=pageSize,
             status=status,
             room_id=room_id,
             from_date=from_date,
             to_date=to_date,
         )
 
-        total = service.count_appointments(status=status, room_id=room_id)
+        totalItems = service.count_appointments(status=status, room_id=room_id)
+        totalPages = (totalItems + pageSize - 1) // pageSize if totalItems > 0 else 1
 
         # Convert to list response with room info
         appointment_list = []
@@ -127,9 +131,12 @@ def get_appointments(
         return response.success(
             data={
                 "items": appointment_list,
-                "total": total,
-                "skip": skip,
-                "limit": limit,
+                "pagination": {
+                    "totalItems": totalItems,
+                    "page": page,
+                    "pageSize": pageSize,
+                    "totalPages": totalPages,
+                }
             },
             message="Lấy danh sách appointments thành công",
         )
@@ -176,6 +183,61 @@ def get_pending_appointments(
         return response.success(
             data=appointment_list,
             message=f"Có {len(appointment_list)} lịch hẹn đang chờ xử lý",
+        )
+    except BadRequestException:
+        raise
+    except Exception as e:
+        raise BadRequestException(message=f"Lỗi: {str(e)}")
+
+
+@router.get(
+    "/my-appointments",
+    response_model=Response[dict],
+    status_code=status.HTTP_200_OK,
+    summary="Tra cứu lịch hẹn của tôi (Public)",
+    description="""
+    API cho phép người dùng tra cứu lịch hẹn đã đặt bằng email hoặc số điện thoại.
+    
+    **Thông tin cần thiết (ít nhất 1 trong 2):**
+    - email: Email đã dùng khi đặt lịch
+    - phone: Số điện thoại đã dùng khi đặt lịch
+    """,
+)
+def get_my_appointments(
+    email: Optional[str] = Query(None, description="Email đã đặt lịch"),
+    phone: Optional[str] = Query(None, description="Số điện thoại đã đặt lịch"),
+    session: AsyncSession = Depends(get_db),
+):
+    """Tra cứu lịch hẹn theo email hoặc phone."""
+    try:
+        if not email and not phone:
+            raise BadRequestException(
+                message="Vui lòng nhập email hoặc số điện thoại để tra cứu",
+            )
+
+        service = AppointmentService(session)
+        appointments = service.get_appointments_by_contact(email=email, phone=phone)
+
+        # Convert to response with room info
+        appointment_list = []
+        for apt in appointments:
+            apt_dict = AppointmentListResponse.model_validate(apt).model_dump()
+            apt_dict["admin_notes"] = apt.admin_notes  # Include admin notes for user
+            if apt.room:
+                apt_dict["room_number"] = apt.room.room_number
+                if apt.room.building:
+                    apt_dict["building_name"] = apt.room.building.building_name
+                    # Thêm địa chỉ nếu có
+                    if apt.room.building.address:
+                        apt_dict["address"] = apt.room.building.address.address_line
+            appointment_list.append(apt_dict)
+
+        return response.success(
+            data={
+                "items": appointment_list,
+                "total": len(appointment_list),
+            },
+            message=f"Tìm thấy {len(appointment_list)} lịch hẹn",
         )
     except BadRequestException:
         raise

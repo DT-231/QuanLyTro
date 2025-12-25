@@ -12,6 +12,8 @@ export const contractFormSchema = z.object({
   paymentCycle: z.string(),
   electricityPrice: z.coerce.number().min(0),
   waterPrice: z.coerce.number().min(0),
+  // Số điện ban đầu lúc ký hợp đồng - dùng để tính toán hóa đơn tháng đầu tiên
+  initialElectricityIndex: z.coerce.number().min(0, "Số điện không được âm"),
   status: z.string(),
   terms: z.string().optional(),
 });
@@ -28,6 +30,7 @@ export const getDefaultFormValues = () => ({
   paymentCycle: "1",
   electricityPrice: 3500,
   waterPrice: 15000,
-  status: "ACTIVE",
+  initialElectricityIndex: 0,  // Số điện ban đầu lúc ký hợp đồng
+  status: "PENDING",  // Mặc định là "Chờ ký" thay vì "Hoạt động"
   terms: "Bên thuê có trách nhiệm bảo quản tài sản và thanh toán đúng hạn.",
 });

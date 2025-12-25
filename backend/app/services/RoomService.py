@@ -23,7 +23,9 @@ from app.models.room import Room
 from app.models.building import Building
 from app.models.room_utility import RoomUtility
 from app.models.room_photo import RoomPhoto
+from app.models.contract import Contract
 from app.core.Enum.roomEnum import RoomStatus
+from app.core.Enum.contractEnum import ContractStatus
 from app.core.utils.uuid import generate_uuid7
 
 
@@ -311,14 +313,16 @@ class RoomService:
                 if existing and existing.id != room_id:
                     raise ValueError(f"Số phòng {new_room_number} đã tồn tại trong tòa nhà này")
         
-        # Extract utilities và photo_urls nếu có
+        # Extract utilities và photo data nếu có
         utilities = room_data.utilities
         photo_urls = room_data.photo_urls
+        keep_photo_ids = room_data.keep_photo_ids
+        new_photos = room_data.new_photos
         
-        # UPDATE room basic info TRƯỚC (exclude utilities, photo_urls, default_service_fees)
+        # UPDATE room basic info TRƯỚC (exclude utilities, photo fields, default_service_fees)
         room_dict = room_data.model_dump(
             exclude_unset=True, 
-            exclude={'utilities', 'photo_urls', 'default_service_fees'}
+            exclude={'utilities', 'photo_urls', 'keep_photo_ids', 'new_photos', 'default_service_fees'}
         )
         
         # Convert default_service_fees nếu có
@@ -341,19 +345,84 @@ class RoomService:
         # XÓA utilities/photos CŨ SAU (query trực tiếp, không qua relationship)
         if utilities is not None:
             # Xóa utilities cũ bằng query trực tiếp
+            # Dùng synchronize_session='fetch' để SQLAlchemy xóa objects khỏi session
             self.db.query(RoomUtility).filter(RoomUtility.room_id == room_id).delete(
-                synchronize_session=False
+                synchronize_session='fetch'
             )
             self.db.flush()
         
+        # --- XỬ LÝ PHOTOS ---
+        # Hỗ trợ 2 mode:
+        # 1. Legacy: photo_urls (replace toàn bộ bằng URL)
+        # 2. New: keep_photo_ids + new_photos (giữ ảnh cũ theo ID + thêm ảnh mới base64)
+        
+        photos_updated = False
+        
+        # Mode 1: Legacy - replace toàn bộ bằng photo_urls
         if photo_urls is not None and user_id:
             # Xóa photos cũ bằng query trực tiếp
             self.db.query(RoomPhoto).filter(RoomPhoto.room_id == room_id).delete(
-                synchronize_session=False
+                synchronize_session='fetch'
             )
             self.db.flush()
+            
+            # Thêm photos mới từ URLs
+            for idx, url in enumerate(photo_urls):
+                photo = RoomPhoto(
+                    room_id=room_id,
+                    url=url,
+                    is_primary=(idx == 0),
+                    sort_order=idx,
+                    uploaded_by=user_id
+                )
+                self.db.add(photo)
+            photos_updated = True
         
-        # THÊM utilities/photos MỚI
+        # Mode 2: New - keep_photo_ids + new_photos
+        elif keep_photo_ids is not None or new_photos is not None:
+            # Nếu có keep_photo_ids, xóa những ảnh KHÔNG nằm trong danh sách giữ lại
+            if keep_photo_ids is not None:
+                # Xóa ảnh không nằm trong keep_photo_ids
+                self.db.query(RoomPhoto).filter(
+                    RoomPhoto.room_id == room_id,
+                    ~RoomPhoto.id.in_(keep_photo_ids)
+                ).delete(synchronize_session='fetch')
+                self.db.flush()
+            
+            # Thêm ảnh mới từ new_photos (base64)
+            if new_photos and user_id:
+                # Đếm số ảnh hiện tại để xác định sort_order
+                existing_count = self.db.query(RoomPhoto).filter(
+                    RoomPhoto.room_id == room_id
+                ).count()
+                
+                for idx, photo_data in enumerate(new_photos):
+                    # Xử lý cả dict và RoomPhotoInput object
+                    if isinstance(photo_data, dict):
+                        image_base64 = photo_data.get('image_base64')
+                        is_primary = photo_data.get('is_primary', False)
+                        sort_order = photo_data.get('sort_order', existing_count + idx)
+                    else:
+                        image_base64 = getattr(photo_data, 'image_base64', None)
+                        is_primary = getattr(photo_data, 'is_primary', False)
+                        sort_order = getattr(photo_data, 'sort_order', existing_count + idx)
+                    
+                    if not image_base64:
+                        continue
+                    
+                    photo = RoomPhoto(
+                        room_id=room_id,
+                        image_base64=image_base64,
+                        url=None,
+                        is_primary=is_primary,
+                        sort_order=sort_order,
+                        uploaded_by=user_id
+                    )
+                    self.db.add(photo)
+            
+            photos_updated = True
+        
+        # THÊM utilities MỚI
         if utilities is not None:
             # Thêm utilities mới
             for utility_name in utilities:
@@ -364,18 +433,6 @@ class RoomService:
                     description=None
                 )
                 self.db.add(utility)
-        
-        if photo_urls is not None and user_id:
-            # Thêm photos mới
-            for idx, url in enumerate(photo_urls):
-                photo = RoomPhoto(
-                    room_id=room_id,
-                    url=url,
-                    is_primary=(idx == 0),
-                    sort_order=idx,
-                    uploaded_by=user_id
-                )
-                self.db.add(photo)
         
         # Commit tất cả thay đổi
         self.db.commit()
@@ -390,34 +447,36 @@ class RoomService:
         """Xóa phòng.
         
         Business rules:
-        - Không xóa phòng đang có hợp đồng active (optional, có thể thêm sau).
+        - Không xóa phòng đang có hợp đồng ACTIVE hoặc PENDING.
         
         Args:
             room_id: UUID của phòng cần xóa.
             
         Raises:
-            ValueError: Nếu không tìm thấy phòng.
+            ValueError: Nếu không tìm thấy phòng hoặc phòng đang có hợp đồng.
         """
         # Lấy ORM instance để xóa (không dùng get_room vì nó trả RoomDetailOut)
         room_orm = self.room_repo.get_by_id(room_id)
         if not room_orm:
             raise ValueError(f"Không tìm thấy phòng với ID: {room_id}")
         
-        # TODO: Kiểm tra phòng có hợp đồng active không
-        # if room_orm.contracts với status active:
-        #     raise ValueError("Không thể xóa phòng đang có hợp đồng")
-        
-        # Xóa utilities của phòng trước
-        self.db.query(RoomUtility).filter(RoomUtility.room_id == room_id).delete(
-            synchronize_session=False
+        # Kiểm tra phòng có hợp đồng ACTIVE/PENDING không
+        active_statuses = [ContractStatus.ACTIVE.value, ContractStatus.PENDING.value]
+        active_contracts = (
+            self.db.query(Contract)
+            .filter(
+                Contract.room_id == room_id,
+                Contract.status.in_(active_statuses)
+            )
+            .count()
         )
+        if active_contracts > 0:
+            raise ValueError(
+                f"Không thể xoá phòng {room_orm.room_number} vì đang có hợp đồng. "
+                "Vui lòng kết thúc hoặc huỷ hợp đồng trước khi thực hiện thao tác này."
+            )
         
-        # Xóa photos của phòng trước
-        self.db.query(RoomPhoto).filter(RoomPhoto.room_id == room_id).delete(
-            synchronize_session=False
-        )
-        
-        # Xóa phòng
+        # Xóa phòng (cascade sẽ tự động xóa utilities, photos, appointments, etc.)
         self.room_repo.delete(room_orm)
     
     def _room_to_detail_out(self, room: Room) -> RoomDetailOut:
@@ -567,11 +626,11 @@ class RoomService:
             'photos': photos,
         }
         
+        # Parse default_service_fees từ JSON (dùng cho cả 2 role)
+        service_fees = self._parse_service_fees(room.default_service_fees)
+        
         # Trả về schema phù hợp với role
         if user_role == "ADMIN":
-            # Parse default_service_fees từ JSON
-            service_fees = self._parse_service_fees(room.default_service_fees)
-            
             return RoomAdminDetail(
                 **base_data,
                 default_service_fees=service_fees,
@@ -580,7 +639,10 @@ class RoomService:
                 updated_at=room.updated_at
             )
         else:
-            return RoomPublicDetail(**base_data)
+            return RoomPublicDetail(
+                **base_data,
+                default_service_fees=service_fees
+            )
     
     def _parse_service_fees(self, fees_json: list | None) -> List[RoomServiceFeeItem]:
         """Parse JSON service fees thành list RoomServiceFeeItem.
@@ -799,17 +861,8 @@ class RoomService:
             joinedload(Room.room_photos)
         )
         
-        # PUBLIC: Chỉ lấy phòng AVAILABLE và KHÔNG có contract ACTIVE
-        query = query.filter(Room.status == RoomStatus.AVAILABLE.value)
-        
-        # Filter out rooms với active contracts
-        active_contract_exists = exists().where(
-            and_(
-                Contract.room_id == Room.id,
-                Contract.status == ContractStatus.ACTIVE.value
-            )
-        )
-        query = query.filter(not_(active_contract_exists))
+        # PUBLIC: Lấy TẤT CẢ phòng (không filter theo status)
+        # Sẽ sắp xếp theo trạng thái sau khi query
         
         # Join với Building và Address nếu cần filter theo city/ward
         needs_join = search or city or ward
@@ -847,26 +900,16 @@ class RoomService:
         if max_capacity is not None:
             query = query.filter(Room.capacity <= max_capacity)
         
-        # Sắp xếp - mặc định theo created_at DESC (mới nhất trước)
-        if sort_by == "price_asc":
-            query = query.order_by(Room.base_price.asc())
-        elif sort_by == "price_desc":
-            query = query.order_by(Room.base_price.desc())
-        else:
-            query = query.order_by(Room.created_at.desc())
+        # Lấy tất cả rooms (sẽ sắp xếp trong Python sau khi tính occupants)
+        # Sắp xếp sơ bộ theo created_at DESC
+        query = query.order_by(Room.created_at.desc())
         
-        # Count total
-        totalItems = query.count()
+        # Lấy tất cả rooms để tính toán và sắp xếp
+        all_rooms = query.all()
         
-        # Tính offset
-        offset = (page - 1) * pageSize
-        
-        # Pagination
-        rooms = query.offset(offset).limit(pageSize).all()
-        
-        # Convert to RoomPublicListItem
+        # Convert to RoomPublicListItem và tính availability_priority
         items = []
-        for room in rooms:
+        for room in all_rooms:
             # Lấy building info
             building = room.building
             building_name = building.building_name if building else "N/A"
@@ -877,9 +920,19 @@ class RoomService:
                 addr = building.address
                 full_address = f"{addr.address_line}, {addr.ward}, {addr.city}"
             
-            # Kiểm tra phòng còn trống không
-            active_contract = self.contract_repo.get_active_contract_by_room(room.id)
-            is_available = (room.status == RoomStatus.AVAILABLE.value) and (active_contract is None)
+            # Tính số người đang ở trong phòng
+            current_occupants = self.contract_repo.get_total_tenants_in_room(room.id)
+            
+            # Phòng còn chỗ trống (chưa full) = is_available
+            is_available = current_occupants < room.capacity
+            
+            # Tính priority: 0 = còn trống, 1 = có người nhưng chưa full, 2 = đã full
+            if current_occupants == 0:
+                availability_priority = 0  # Còn trống hoàn toàn
+            elif current_occupants < room.capacity:
+                availability_priority = 1  # Có người nhưng chưa full
+            else:
+                availability_priority = 2  # Đã full
             
             # Lấy ảnh đại diện (ảnh có is_primary=True hoặc ảnh đầu tiên)
             primary_photo = None
@@ -893,25 +946,49 @@ class RoomService:
                     first_photo = sorted(room.room_photos, key=lambda p: p.sort_order)[0]
                     primary_photo = first_photo.image_base64 if first_photo.image_base64 else first_photo.url
             
-            items.append(RoomPublicListItem(
-                id=room.id,
-                room_number=room.room_number,
-                room_name=room.room_name,
-                building_name=building_name,
-                full_address=full_address,
-                base_price=room.base_price,
-                area=room.area,
-                capacity=room.capacity,
-                is_available=is_available,
-                primary_photo=primary_photo,
-                created_at=room.created_at
-            ))
+            items.append({
+                "item": RoomPublicListItem(
+                    id=room.id,
+                    room_number=room.room_number,
+                    room_name=room.room_name,
+                    building_name=building_name,
+                    full_address=full_address,
+                    base_price=room.base_price,
+                    area=room.area,
+                    capacity=room.capacity,
+                    current_occupants=current_occupants,
+                    is_available=is_available,
+                    primary_photo=primary_photo,
+                    created_at=room.created_at
+                ),
+                "priority": availability_priority,
+                "created_at": room.created_at,
+                "price": room.base_price
+            })
+        
+        # Sắp xếp theo priority (còn trống -> chưa full -> full), sau đó theo giá hoặc thời gian
+        if sort_by == "price_asc":
+            items.sort(key=lambda x: (x["priority"], x["price"]))
+        elif sort_by == "price_desc":
+            items.sort(key=lambda x: (x["priority"], -x["price"]))
+        else:
+            # Mặc định: theo priority, rồi theo thời gian mới nhất
+            items.sort(key=lambda x: (x["priority"], -x["created_at"].timestamp()))
+        
+        # Tổng số items
+        totalItems = len(items)
+        
+        # Tính offset cho pagination
+        offset = (page - 1) * pageSize
+        
+        # Lấy items cho trang hiện tại
+        paginated_items = [item["item"] for item in items[offset:offset + pageSize]]
         
         # Tính tổng số trang
         totalPages = (totalItems + pageSize - 1) // pageSize if totalItems > 0 else 1
         
         return {
-            "items": items,
+            "items": paginated_items,
             "pagination": {
                 "totalItems": totalItems,
                 "page": page,

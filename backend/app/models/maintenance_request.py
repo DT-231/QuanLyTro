@@ -29,8 +29,10 @@ class MaintenanceRequest(BaseModel):
     description = Column(Text, nullable=False)
     priority = Column(String(20), nullable=False, default=MaintenancePriority.MEDIUM.value, index=True)
     status = Column(String(20), nullable=False, default=MaintenanceStatus.PENDING.value, index=True)
-    estimated_cost = Column(DECIMAL(10, 2), nullable=True)
-    actual_cost = Column(DECIMAL(10, 2), nullable=True)
+    
+    # Các cột tiền tệ dùng DECIMAL(15, 2) để hỗ trợ giá trị lớn
+    estimated_cost = Column(DECIMAL(15, 2), nullable=True)
+    actual_cost = Column(DECIMAL(15, 2), nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
     
     # Relationships

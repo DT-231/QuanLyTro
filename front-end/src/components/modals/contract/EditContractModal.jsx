@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Loader2, Save } from "lucide-react";
+import { Loader2, Save, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { contractService } from "@/services/contractService";
 
@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 // --- 1. SCHEMA VALIDATION ---
 // Các trường là optional, nhưng nếu nhập thì phải đúng định dạng số/ngày
@@ -42,13 +43,21 @@ const editSchema = z.object({
   water_price: z.coerce.number().min(0),
 });
 
+/**
+ * EditContractModal - Modal chỉnh sửa hợp đồng
+ * 
+ * LƯU Ý: Chỉ cho phép sửa hợp đồng ở trạng thái PENDING (chờ ký).
+ * Hợp đồng ACTIVE, EXPIRED, TERMINATED không được phép sửa.
+ */
 export default function EditContractModal({
   isOpen,
   onClose,
   onUpdateSuccess,
-  contractData, // Dữ liệu hợp đồng cần sửa (truyền từ cha)
+  contractData, // Dữ liệu hợp đồng cần sửa (truyền từ cha - có thể chỉ có id và contract_number)
 }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [fullContractData, setFullContractData] = useState(null);
 
   // --- 2. INIT FORM ---
   const form = useForm({
@@ -60,7 +69,7 @@ export default function EditContractModal({
       deposit_amount: 0,
       payment_day: 15,
       number_of_tenants: 1,
-      status: "ACTIVE",
+      status: "PENDING",
       terms_and_conditions: "",
       notes: "",
       payment_cycle_months: 1,
@@ -69,26 +78,48 @@ export default function EditContractModal({
     },
   });
 
-  // --- 3. LOAD DATA KHI MỞ MODAL ---
+  // --- 3. FETCH CHI TIẾT HỢP ĐỒNG KHI MỞ MODAL ---
+  // Vì danh sách hợp đồng (ContractListItem) không có đủ các trường cần thiết,
+  // nên cần gọi API lấy chi tiết hợp đồng (ContractOut) khi mở modal
   useEffect(() => {
-    if (isOpen && contractData) {
-      // Reset form với dữ liệu hiện tại của hợp đồng
-      form.reset({
-        start_date: contractData.start_date ? contractData.start_date.split("T")[0] : "",
-        end_date: contractData.end_date ? contractData.end_date.split("T")[0] : "",
-        rental_price: contractData.rental_price,
-        deposit_amount: contractData.deposit_amount,
-        payment_day: contractData.payment_day,
-        number_of_tenants: contractData.number_of_tenants,
-        status: contractData.status,
-        terms_and_conditions: contractData.terms_and_conditions || "",
-        notes: contractData.notes || "",
-        payment_cycle_months: contractData.payment_cycle_months,
-        electricity_price: contractData.electricity_price,
-        water_price: contractData.water_price,
-      });
-    }
-  }, [isOpen, contractData, form]);
+    const fetchContractDetails = async () => {
+      if (!isOpen || !contractData?.id) return;
+      
+      setIsLoading(true);
+      try {
+        const response = await contractService.getById(contractData.id);
+        if (response?.data || response?.success) {
+          const data = response.data || response;
+          setFullContractData(data);
+          
+          // Reset form với dữ liệu đầy đủ từ API
+          form.reset({
+            start_date: data.start_date ? data.start_date.split("T")[0] : "",
+            end_date: data.end_date ? data.end_date.split("T")[0] : "",
+            rental_price: data.rental_price || 0,
+            deposit_amount: data.deposit_amount || 0,
+            payment_day: data.payment_day || 15,
+            number_of_tenants: data.number_of_tenants || 1,
+            status: data.status || "PENDING",
+            terms_and_conditions: data.terms_and_conditions || "",
+            notes: data.notes || "",
+            payment_cycle_months: data.payment_cycle_months || 1,
+            electricity_price: data.electricity_price || 0,
+            water_price: data.water_price || 0,
+          });
+        } else {
+          toast.error("Không thể tải chi tiết hợp đồng");
+        }
+      } catch (error) {
+        console.error("Error fetching contract details:", error);
+        toast.error("Lỗi khi tải chi tiết hợp đồng");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    fetchContractDetails();
+  }, [isOpen, contractData?.id, form]);
 
   // --- 4. SUBMIT HANDLER ---
   const onSubmit = async (values) => {
@@ -126,6 +157,13 @@ export default function EditContractModal({
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto p-6">
+          {/* Loading state khi đang fetch chi tiết hợp đồng */}
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+              <span className="ml-2 text-gray-500">Đang tải dữ liệu...</span>
+            </div>
+          ) : (
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               
@@ -239,13 +277,18 @@ export default function EditContractModal({
 
             </form>
           </Form>
+          )}
         </div>
 
         <DialogFooter className="px-6 py-4 border-t bg-gray-50">
-          <Button variant="outline" onClick={onClose} disabled={isSubmitting}>
+          <Button variant="outline" onClick={onClose} disabled={isSubmitting || isLoading}>
             Hủy bỏ
           </Button>
-          <Button onClick={form.handleSubmit(onSubmit)} disabled={isSubmitting} className="bg-blue-600 hover:bg-blue-700 min-w-[100px]">
+          <Button 
+            onClick={form.handleSubmit(onSubmit)} 
+            disabled={isSubmitting || isLoading} 
+            className="bg-blue-600 hover:bg-blue-700 min-w-[100px]"
+          >
             {isSubmitting ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <Save className="mr-2 h-4 w-4" />}
             Lưu thay đổi
           </Button>

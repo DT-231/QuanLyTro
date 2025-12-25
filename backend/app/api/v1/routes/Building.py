@@ -250,7 +250,7 @@ def update_building(
     "/{building_id}",
     status_code=status.HTTP_200_OK,
     summary="Xóa tòa nhà",
-    description="Xóa tòa nhà khỏi hệ thống",
+    description="Xóa tòa nhà khỏi hệ thống. Nếu có phòng đang cho thuê (OCCUPIED), không thể xóa.",
 )
 def delete_building(
     building_id: UUID,
@@ -259,18 +259,20 @@ def delete_building(
     """Xóa tòa nhà.
     
     Business rules:
-    - Không xóa được tòa nhà đang có phòng
+    - Nếu không có phòng → cho phép xóa
+    - Nếu có phòng nhưng tất cả đều AVAILABLE/MAINTENANCE/RESERVED → xóa cả phòng
+    - Nếu có phòng OCCUPIED → không cho phép xóa
     
     Args:
         building_id: UUID của tòa nhà cần xóa
     
     Returns:
-        Success message
+        Success message với số phòng đã xóa
     """
     try:
         building_service = BuildingService(db)
-        building_service.delete_building(building_id)
-        return response.success(message="Xóa tòa nhà thành công")
+        result = building_service.delete_building(building_id)
+        return response.success(message="Đã xóa tòa nhà thành công", data=result)
     except ValueError as e:
         error_msg = str(e).lower()
         if "không tìm thấy" in error_msg or "not found" in error_msg:

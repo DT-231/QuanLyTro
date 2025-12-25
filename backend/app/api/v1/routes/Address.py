@@ -41,29 +41,27 @@ router = APIRouter(prefix="/addresses", tags=["Address Management"])
 )
 def list_addresses(
     city: Optional[str] = Query("", description="Lọc theo thành phố"),
-    page: int = Query(0, ge=0, description="Vị trí bắt đầu"),
-    per_page: int = Query(20, ge=1, le=100, description="Số lượng tối đa (max 100)"),
+    page: int = Query(1, ge=1, description="Số trang (bắt đầu từ 1)"),
+    pageSize: int = Query(20, ge=1, le=100, description="Số lượng mỗi trang (max 100)"),
     db: Session = Depends(get_db),
 ):
     """Lấy danh sách địa chỉ với các filter options.
 
     Query params:
     - city: Tên thành phố (optional, hỗ trợ tìm kiếm gần đúng)
-    - offset: Vị trí bắt đầu (default 0)
-    - limit: Số lượng tối đa (default 20, max 100)
+    - page: Số trang (default 1)
+    - pageSize: Số lượng mỗi trang (default 20, max 100)
 
     Returns:
     - items: Danh sách địa chỉ
-    - total: Tổng số địa chỉ
-    - offset: Vị trí bắt đầu
-    - limit: Số lượng tối đa
+    - pagination: {totalItems, page, pageSize, totalPages}
     """
     try:
         address_service = AddressService(db)
         result = address_service.list_addresses(
             city=city,
-            offset=page,
-            limit=per_page,
+            page=page,
+            pageSize=pageSize,
         )
         return response.success(data=result, message="Lấy danh sách địa chỉ thành công")
     except ValueError as e:

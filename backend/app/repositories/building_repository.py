@@ -30,7 +30,7 @@ class BuildingRepository:
         self.db = db
 
     def get_by_id(self, building_id: UUID) -> Optional[Building]:
-        """Lấy Building theo ID với eager loading address.
+        """Lấy Building theo ID với eager loading address và rooms.
         
         Args:
             building_id: UUID của tòa nhà cần tìm.
@@ -40,7 +40,10 @@ class BuildingRepository:
         """
         return (
             self.db.query(Building)
-            .options(joinedload(Building.address))  # Eager load relationship 'address'
+            .options(
+                joinedload(Building.address),  # Eager load relationship 'address'
+                joinedload(Building.rooms)     # Eager load relationship 'rooms' cho delete
+            )
             .filter(Building.id == building_id)
             .first()
         )

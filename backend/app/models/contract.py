@@ -5,7 +5,7 @@ Model này định nghĩa cấu trúc hợp đồng thuê phòng theo database s
 
 from __future__ import annotations
 
-from sqlalchemy import Column, String, Date, DECIMAL, Integer, Text, ForeignKey
+from sqlalchemy import Column, String, Date, DECIMAL, Integer, Text, ForeignKey, Float
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID, JSON
 
@@ -25,17 +25,22 @@ class Contract(BaseModel):
     tenant_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
     start_date = Column(Date, nullable=False)
     end_date = Column(Date, nullable=False)
-    rental_price = Column(DECIMAL(10, 2), nullable=False)  # Giá thuê thỏa thuận
-    deposit_amount = Column(DECIMAL(10, 2), nullable=False)  # Tiền đặt cọc
+    
+    # Các cột tiền tệ dùng DECIMAL(15, 2) để hỗ trợ giá trị lớn (tới hàng nghìn tỷ VND)
+    rental_price = Column(DECIMAL(15, 2), nullable=False)  # Giá thuê thỏa thuận
+    deposit_amount = Column(DECIMAL(15, 2), nullable=False)  # Tiền đặt cọc
     payment_day = Column(Integer, nullable=True)  # Ngày thanh toán hàng tháng (1-31)
     number_of_tenants = Column(Integer, nullable=False, default=1)  # Số người ở trong phòng
     status = Column(String(50), nullable=False, default=ContractStatus.ACTIVE.value, index=True)
     
     # Thông tin thanh toán chi tiết
     payment_cycle_months = Column(Integer, nullable=True, default=1)  # Chu kỳ thanh toán (tháng)
-    electricity_price = Column(DECIMAL(10, 2), nullable=True)  # Giá điện (VNĐ/kWh)
-    water_price = Column(DECIMAL(10, 2), nullable=True)  # Giá nước (VNĐ/m³)
+    electricity_price = Column(DECIMAL(15, 2), nullable=True)  # Giá điện (VNĐ/kWh)
+    water_price = Column(DECIMAL(15, 2), nullable=True)  # Giá nước (VNĐ/m³)
     service_fees = Column(JSON, nullable=True)  # Phí dịch vụ dưới dạng JSON array: [{"name": "Internet", "amount": 100000}]
+    
+    # Chỉ số điện ban đầu khi ký hợp đồng - dùng để tính toán hóa đơn tháng đầu tiên
+    initial_electricity_index = Column(Float, nullable=True, default=0)  # Số điện lúc ký hợp đồng
     
     terms_and_conditions = Column(Text, nullable=True)  # Các điều khoản, quy định
     notes = Column(Text, nullable=True)

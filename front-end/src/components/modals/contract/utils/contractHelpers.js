@@ -46,6 +46,8 @@ export const createContractPayload = (values, cccd, services) => {
     payment_cycle_months: parseInt(values.paymentCycle),
     electricity_price: values.electricityPrice,
     water_price: values.waterPrice,
+    // Số điện ban đầu lúc ký hợp đồng - dùng để tính hóa đơn tháng đầu tiên
+    initial_electricity_index: values.initialElectricityIndex || 0,
     number_of_tenants: 1,
     terms_and_conditions: values.terms || "",
     notes: "",

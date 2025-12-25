@@ -1,25 +1,47 @@
+/**
+ * Contract Service - API client cho quản lý hợp đồng thuê phòng
+ *
+ * Các chức năng:
+ * - CRUD hợp đồng
+ * - Xác nhận/Từ chối hợp đồng (Tenant)
+ * - Yêu cầu/Phê duyệt chấm dứt hợp đồng
+ * - Quản lý pending changes (thay đổi chờ xác nhận)
+ * - Lấy thông tin phòng còn trống để tạo hợp đồng
+ */
 import api from "@/lib/api"; 
 
-// Helper để tránh crash ứng dụng khi API lỗi
+/**
+ * Helper: Wrap API call để tránh crash UI khi API lỗi
+ * @param {Promise} requestPromise - Promise từ axios
+ * @returns {Promise<Object|null>} Response data hoặc null nếu lỗi
+ */
 const safeRequest = async (requestPromise) => {
   try {
     const response = await requestPromise;
     return response.data;
   } catch (error) {
     console.error("API Error:", error?.response?.data || error.message);
-    // Trả về null hoặc object rỗng để UI không bị trắng trang
     return error?.response?.data || null; 
   }
 };
 
 export const contractService = {
 
-  // ========== CRUD Operations ==========
+  // ==================================================================================
+  // CRUD OPERATIONS
+  // ==================================================================================
   
+  /**
+   * Lấy danh sách hợp đồng với filter và pagination
+   */
   getAll: async (params) => {
     return safeRequest(api.get("/api/v1/contracts/", { params }));
   },
 
+  /**
+   * Lấy thống kê hợp đồng cho Dashboard
+   * @returns {Promise<Object>} {total_contracts, active_contracts, expiring_soon, expired_contracts}
+   */
   getStats: async () => {
     return safeRequest(api.get("/api/v1/contracts/stats"));
   },

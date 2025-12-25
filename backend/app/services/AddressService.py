@@ -77,39 +77,45 @@ class AddressService:
     def list_addresses(
         self,
         city: Optional[str] = "",
-        offset: int = 0,
-        limit: int = 100,
+        page: int = 1,
+        pageSize: int = 20,
     ) -> dict:
         """Lấy danh sách địa chỉ với filter và pagination.
 
         Args:
             city: Lọc theo thành phố (optional).
-            offset: Vị trí bắt đầu.
-            limit: Số lượng tối đa (max 100).
+            page: Số trang (bắt đầu từ 1).
+            pageSize: Số lượng mỗi trang (max 100).
 
         Returns:
-            Dict chứa items (danh sách địa chỉ) và total (tổng số).
+            Dict chứa items và pagination.
         """
-        # Validate limit
-        if limit > 100:
-            limit = 100
-        if limit < 1:
-            limit = 20
+        # Validate pageSize
+        if pageSize > 100:
+            pageSize = 100
+        if pageSize < 1:
+            pageSize = 20
+        
+        # Validate page
+        if page < 1:
+            page = 1
+
+        # Tính offset
+        offset = (page - 1) * pageSize
 
         # Lấy danh sách và tổng số
-        items = self.address_repo.list(city=city, offset=offset, limit=limit)
-        total = self.address_repo.count(city=city)
-        total_pape = 0 if len(items) == 0 else total / len(items)
+        items = self.address_repo.list(city=city, offset=offset, limit=pageSize)
+        totalItems = self.address_repo.count(city=city)
+        totalPages = (totalItems + pageSize - 1) // pageSize if totalItems > 0 else 1
+        
         items_out = [AddressOut.model_validate(item) for item in items]
         return {
             "items": items_out,
             "pagination": {
-                "page": offset+1,
-                "page_size": limit,
-                "total_items": total,
-                "total_pages": total_pape,
-                "has_next": offset+1 < total_pape,
-                "has_prev": offset >= 1,
+                "totalItems": totalItems,
+                "page": page,
+                "pageSize": pageSize,
+                "totalPages": totalPages,
             },
         }
 

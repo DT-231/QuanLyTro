@@ -299,7 +299,25 @@ const ContractManagement = () => {
     navigate(`/admin/contracts/${contract.id}`);
   };
 
+  /**
+   * Xử lý khi nhấn nút sửa hợp đồng
+   * Chỉ cho phép sửa hợp đồng ở trạng thái PENDING (chờ ký)
+   */
   const handleEditClick = (contract) => {
+    // Chỉ cho phép sửa nếu hợp đồng chưa ký (PENDING)
+    const nonEditableStatuses = ["ACTIVE", "EXPIRED", "TERMINATED"];
+    if (nonEditableStatuses.includes(contract.status)) {
+      const statusLabels = {
+        ACTIVE: "đang hoạt động",
+        EXPIRED: "đã hết hạn",
+        TERMINATED: "đã chấm dứt"
+      };
+      toast.error(
+        `Không thể chỉnh sửa hợp đồng ${contract.contract_number} vì hợp đồng ${statusLabels[contract.status]}. ` +
+        `Chỉ có thể sửa hợp đồng ở trạng thái "Chờ ký".`
+      );
+      return;
+    }
     setContractToEdit(contract);
     setIsEditModalOpen(true);
   };
